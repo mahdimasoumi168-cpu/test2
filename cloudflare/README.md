@@ -63,9 +63,11 @@ Use your own administrator name and codes. The endpoint refuses to create anothe
 
 - One active speaker per room, with exclusive Push-to-Talk control.
 - A global Durable Object caps all active room connections at 100 across the whole service.
-- Room presence has expiring leases; clients refresh the lease every four minutes.
+- Room membership is deny-by-default for regular members. Administrators assign each member to active rooms from the Persian admin panel; the Worker checks membership on every WebSocket and SFU API request.
+- PTT speaker leases are stored atomically in each room Durable Object, bound to the exact WebSocket connection, and released on button release, socket close, or lease expiry. A second device logged into the same account cannot release or renew another device's speaker lease.
+- Login attempts are limited per IP and per account identity; the account identity limit is 10 attempts per 15-minute bucket.
 - Cloudflare Realtime SFU handles publication and subscription. Audio is constrained to a target maximum of 20 kbps per sender to control free egress consumption.
-- TURN credentials are generated for authenticated members with a 48-hour TTL (Cloudflare's maximum).
+- TURN credentials are generated for authenticated members with a 48-hour TTL (Cloudflare's maximum), but the Worker must have the `TURN_KEY_SECRET` secret configured. Without it, clients use STUN only and some restrictive networks may fail to connect.
 - PWA foreground audio is implemented in the branch; background playback while iOS/Android suspends the web page is not guaranteed.
 
 ## Zero-cost constraints
