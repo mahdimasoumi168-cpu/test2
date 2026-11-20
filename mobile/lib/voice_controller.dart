@@ -22,7 +22,9 @@ class VoiceFailure implements Exception {
 }
 
 class VoiceController extends ChangeNotifier {
-  VoiceController(this.audioHandler);
+  VoiceController(this.audioHandler) {
+    audioHandler.onStopRoom = disconnectRoom;
+  }
 
   final HamyarAudioHandler audioHandler;
   final http.Client _http = http.Client();
@@ -54,7 +56,7 @@ class VoiceController extends ChangeNotifier {
   int _talkGeneration = 0;
 
   Uri get _baseUri => Uri.parse(hamyarApiBaseUrl);
-  bool get canTalk => connected && connectionKey != null && _iceReady && !busy;
+  bool get canTalk => connected && connectionKey != null && _iceReady;
 
   Future<Map<String, dynamic>> _request(
     String path, {
@@ -236,6 +238,7 @@ class VoiceController extends ChangeNotifier {
       } else {
         unawaited(_stopSubscriber());
       }
+      busy = false;
       status = 'کانال آزاد شد.';
       notifyListeners();
     } else if (type == 'ptt:budget-blocked') {
