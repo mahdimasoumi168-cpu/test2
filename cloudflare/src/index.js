@@ -9,7 +9,7 @@ const encoder = new TextEncoder();
 function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers }
+    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "referrer-policy": "strict-origin-when-cross-origin", ...headers }
   });
 }
 function b64url(bytes) {
@@ -914,7 +914,14 @@ export default {
       if (request.method === "OPTIONS") return corsResponse(request, env, new Response(null, { status: 204 }));
       const response = await handleApi(request, env);
       if (response) return request.headers.get("upgrade")?.toLowerCase() === "websocket" ? response : corsResponse(request, env, response);
-      return env.ASSETS.fetch(request);
+      const asset = await env.ASSETS.fetch(request);
+      const headers = new Headers(asset.headers);
+      headers.set("content-security-policy", "default-src 'self'; script-src 'self'; connect-src 'self' wss:; media-src 'self' blob:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; upgrade-insecure-requests");
+      headers.set("x-content-type-options", "nosniff");
+      headers.set("referrer-policy", "strict-origin-when-cross-origin");
+      headers.set("permissions-policy", "microphone=(self), camera=()");
+      headers.set("strict-transport-security", "max-age=31536000");
+      return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     } catch (error) {
       console.error(JSON.stringify({ level: "error", message: error?.message || "unknown" }));
       return json({ error: "خطای داخلی سامانه رخ داد." }, 500);
