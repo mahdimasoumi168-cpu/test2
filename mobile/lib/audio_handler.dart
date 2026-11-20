@@ -3,6 +3,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 class HamyarAudioHandler extends BaseAudioHandler {
   String? _roomName;
+  Future<void> Function()? onStopRoom;
 
   void setRoom(String? roomName) {
     _roomName = roomName;
@@ -51,6 +52,7 @@ class HamyarAudioHandler extends BaseAudioHandler {
   @override
   Future<void> stop() async {
     await Helper.pauseAudioPlayout();
+    await onStopRoom?.call();
     setRoom(null);
     await super.stop();
   }
