@@ -729,7 +729,7 @@ export class RoomHub extends DurableObject {
       attachment.lastRequestAt = now;
       socket.serializeAttachment(attachment);
       const claim = this.ctx.storage.sql.exec(
-        "INSERT INTO speaker (id, user_id, display_name, session_id, connection_key, expires_at) VALUES (1, ?, ?, NULL, ?, ?) ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id, display_name=excluded.display_name, session_id=NULL, connection_key=excluded.connection_key, expires_at=excluded.expires_at WHERE speaker.expires_at <= ? OR speaker.connection_key = ? RETURNING user_id, display_name, connection_key, expires_at",
+        "INSERT INTO speaker (id, user_id, display_name, session_id, connection_key, expires_at) VALUES (1, ?, ?, NULL, ?, ?) ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id, display_name=excluded.display_name, session_id=CASE WHEN speaker.connection_key = excluded.connection_key THEN speaker.session_id ELSE NULL END, connection_key=excluded.connection_key, expires_at=excluded.expires_at WHERE speaker.expires_at <= ? OR speaker.connection_key = ? RETURNING user_id, display_name, session_id, connection_key, expires_at",
         attachment.userId, attachment.displayName, attachment.socketKey, now + PTT_LEASE_MS, now, attachment.socketKey
       ).toArray()[0];
       if (!claim) {
@@ -798,11 +798,12 @@ export class RoomHub extends DurableObject {
     this.ctx.storage.sql.exec("DELETE FROM speaker WHERE id = 1");
     await this.ctx.storage.deleteAlarm();
     this.broadcast({ type: "ptt:released", memberId: current.user_id, sessionId: current.session_id || null });
-    const roomId = await this.ctx.storage.get("roomId");
-    const sessions = await this.env.DB.prepare(
-      "SELECT id, mid FROM sfu_sessions WHERE user_id = ? AND room_id = ? AND session_type = 'publisher' AND status <> 'closed'"
-    ).bind(current.user_id, roomId).all().catch(() => ({ results: [] }));
-    for (const session of sessions.results || []) await closeSfuSession(this.env, session.id, session.mid);
+    if (current.session_id) {
+      const session = await this.env.DB.prepare(
+        "SELECT id, mid FROM sfu_sessions WHERE id = ? AND user_id = ? AND session_type = 'publisher' AND status <> 'closed'"
+      ).bind(current.session_id, current.user_id).first().catch(() => null);
+      if (session) await closeSfuSession(this.env, session.id, session.mid);
+    }
   }
 
   async revokeUser(userId) {
@@ -841,10 +842,6 @@ export class RoomHub extends DurableObject {
     if (attachment?.userId) {
       await this.env.GLOBAL_PRESENCE.getByName("global").unregister(attachment.socketKey);
       await this.releaseSpeaker(attachment.userId, attachment.socketKey);
-      const sessions = await this.env.DB.prepare(
-        "SELECT id, mid FROM sfu_sessions WHERE user_id = ? AND room_id = ? AND status <> 'closed'"
-      ).bind(attachment.userId, await this.ctx.storage.get("roomId")).all().catch(() => ({ results: [] }));
-      for (const session of sessions.results || []) await closeSfuSession(this.env, session.id, session.mid);
     }
     this.broadcast({ type: "room:presence", connected: this.ctx.getWebSockets().length });
   }
