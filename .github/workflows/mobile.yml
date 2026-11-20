@@ -1,5 +1,9 @@
 name: Native mobile checks
 
+concurrency:
+  group: native-mobile-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [hardening/voice-phase2-fixes]
