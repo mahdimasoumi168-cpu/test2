@@ -3,7 +3,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 const html = fs.readFileSync(path.join(__dirname, "..", "public", "index.html"), "utf8");
-const scripts = [...html.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/gi)]
+const scripts = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi)]
   .map(match => match[1]).filter(source => source.trim());
 if (!scripts.length) throw new Error("No inline application script found.");
 const temp = path.join(os.tmpdir(), "hamyar-client-check-" + process.pid + ".js");
