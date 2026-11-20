@@ -537,7 +537,7 @@ async function handleApi(request, env) {
   if (path === "/api/admin/audit" && request.method === "GET") {
     if (user.role !== "admin") return json({ error: "دسترسی مدیر لازم است." }, 403);
     const limit = Math.min(200, Math.max(1, Number(url.searchParams.get("limit")) || 50));
-    const events = await env.DB.prepare("SELECT id, user_id AS actor_id, event_type, details_json, created_at FROM security_events ORDER BY id DESC LIMIT ?").bind(limit).all();
+    const events = await env.DB.prepare("SELECT id, user_id AS actor_id, event_type, json_extract(details_json, '$.targetId') AS target_id, details_json, created_at FROM security_events ORDER BY id DESC LIMIT ?").bind(limit).all();
     return json({ events: events.results || [] });
   }
 
