@@ -425,6 +425,8 @@ async function handleApi(request, env) {
     fields.push("session_version = session_version + 1", "updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')");
     values.push(id);
     await env.DB.prepare("UPDATE users SET " + fields.join(", ") + " WHERE id = ?").bind(...values).run();
+    if (body.role === "member") await env.DB.prepare("DELETE FROM room_members WHERE room_id = 'management' AND user_id = ?").bind(id).run();
+    if (body.role === "admin") await env.DB.prepare("INSERT OR IGNORE INTO room_members (room_id, user_id) VALUES ('management', ?)").bind(id).run();
     await audit(env, user.id, "member.updated", id, { fields: fields.map(x => x.split(" ")[0]) });
     const memberships = await env.DB.prepare("SELECT room_id FROM room_members WHERE user_id = ?").bind(id).all();
     for (const item of memberships.results || []) await env.ROOM_HUB.getByName(item.room_id).revokeUser(id);
@@ -703,6 +705,11 @@ export class RoomHub extends DurableObject {
 
   async disableRoom() {
     await this.releaseSpeaker();
+    const roomId = await this.ctx.storage.get("roomId");
+    const sessions = await this.env.DB.prepare(
+      "SELECT id, mid FROM sfu_sessions WHERE room_id = ? AND status <> 'closed'"
+    ).bind(roomId).all().catch(() => ({ results: [] }));
+    for (const session of sessions.results || []) await closeSfuSession(this.env, session.id, session.mid);
     for (const socket of this.ctx.getWebSockets()) {
       try { socket.send(JSON.stringify({ type: "room:disabled" })); } catch {}
       try { socket.close(4003, "Room disabled"); } catch {}
