@@ -78,6 +78,6 @@
   },
   "vars": {
     "ALLOWED_ORIGINS": "capacitor://localhost,http://localhost",
-    "TURN_KEY_ID": "649dc037db48650d26c1b96a882bd040"
+    "TURN_KEY_ID": "085cba327a89cb2e33fd2daefda1b19a"
   }
 }
