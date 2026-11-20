@@ -32,6 +32,12 @@ node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 
 Use a new output for each secret. Save the one-time `BOOTSTRAP_ADMIN_KEY` securely because it cannot be read back from Cloudflare.
 
+## D1 schema provisioning
+
+The production and staging D1 databases already contain schema versions 1–3. The canonical final schema for a **new, empty** D1 database is `cloudflare/schema.sql`. Apply it once to an empty database using the Cloudflare D1 console or D1 query API. Do not run it against the existing production/staging databases, and do not re-run historical migration files 0002/0003 against a database where those columns already exist.
+
+The Worker expects the tables `users`, `rooms`, `room_members`, `security_events`, `sfu_sessions`, and `schema_migrations`. Keep schema changes versioned and test them against a disposable database before applying to production.
+
 ## Deploy and preview
 
 The Cloudflare build trigger for the repository deploys the Worker from the default branch. For a local deployment after configuring secrets:
