@@ -113,6 +113,12 @@ app.get("/api/me", requireMember, (req, res) => {
   res.json({ member: { id: req.member.id, name: req.member.full_name, role: req.member.role } });
 });
 
+app.get("/api/rooms", requireMember, (_req, res) => {
+  res.set("Cache-Control", "no-store");
+  const rooms = db.prepare("SELECT id, name FROM rooms WHERE active = 1 ORDER BY CASE WHEN id = 'management' THEN 0 ELSE 1 END, name COLLATE NOCASE").all();
+  res.json({ rooms });
+});
+
 app.get("/api/admin/members", requireMember, requireAdmin, (_req, res) => {
   res.set("Cache-Control", "no-store");
   const members = db.prepare("SELECT id, full_name, role, active, created_at FROM members ORDER BY id DESC LIMIT 500").all();
