@@ -26,9 +26,9 @@
 <button class="primary" type="submit">افزودن اتاق</button></form>
 <div id="roomAdminList"></div>
 <h2>گزارش فعالیت مدیران</h2><button id="loadAudit" class="room" type="button">نمایش گزارش آخرین فعالیت‌ها</button><div id="auditList"></div></section><h2>اتاق‌های ارتباطی</h2><div id="roomGrid" class="rooms"></div></section>
-<section class="card"><h2>ارتباط بی‌سیم</h2><button id="ptt" class="ptt">برای صحبت نگه دارید</button><div id="status" class="status">ابتدا یک اتاق انتخاب کنید.</div>
-<p class="muted">این نسخه نوبت صحبت را مدیریت می‌کند؛ انتقال واقعی صدا از طریق WebRTC/SFU در مرحلهٔ بعد افزوده می‌شود.</p></section>
+<section class="card"><h2>ارتباط بی‌سیم</h2><button id="ptt" class="ptt">برای صحبت نگه دارید</button><div id="status" class="status">ابتدا یک اتاق انتخاب کنید.</div><audio id="remoteAudio" autoplay playsinline></audio>
+<p class="muted">فقط دارنده نوبت می‌تواند صدا منتشر کند؛ هنگام رهاکردن دکمه، انتشار صدا متوقف می‌شود. دریافت در پس‌زمینه به نسخه بومی اندروید و iOS نیاز دارد.</p></section>
 <button id="logout" class="primary">خروج از حساب</button></section>
 <p class="muted">نسخهٔ اولیهٔ همیار هیئت · برای عملکرد عملیاتی به HTTPS و سرور رسانه نیاز است.</p>
 </main>
-<script src="/socket.io/socket.io.js" defer></script><script src="/audio-processing.js" defer></script><script src="/app.js" defer></script></body></html>
+<script src="/audio-processing.js" defer></script><script src="/app.js" defer></script></body></html>
