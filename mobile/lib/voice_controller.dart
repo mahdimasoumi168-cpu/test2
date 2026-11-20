@@ -371,7 +371,7 @@ class VoiceController extends ChangeNotifier {
       await _waitForIce(pc);
       final local = await pc.getLocalDescription();
       final mid = transceiver.mid;
-      if (local?.sdp == null || mid == null) {
+      if (local?.sdp == null || mid.isEmpty) {
         throw VoiceFailure('توضیحات اتصال صوتی کامل نشد.');
       }
       if (!_isCurrentTalk(generation)) throw VoiceFailure('درخواست صحبت لغو شد.');
