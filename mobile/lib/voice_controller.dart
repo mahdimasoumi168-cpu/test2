@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
@@ -53,6 +54,9 @@ class VoiceController extends ChangeNotifier {
   RTCPeerConnection? _subscriberPc;
   String? _subscriberSessionId;
   String? _activePublisherId;
+  String? _pendingPublisherSessionId;
+  String? _pendingSpeakerId;
+  int _subscriberGeneration = 0;
   int _talkGeneration = 0;
 
   Uri get _baseUri => Uri.parse(hamyarApiBaseUrl);
@@ -151,6 +155,7 @@ class VoiceController extends ChangeNotifier {
     try {
       await Helper.ensureAudioSession();
       await Helper.setSpeakerphoneOnButPreferBluetooth();
+      if (Platform.isAndroid) await Permission.notification.request();
       final uri = _baseUri.replace(
         scheme: _baseUri.scheme == 'https' ? 'wss' : 'ws',
         path: '/api/rooms/' + Uri.encodeComponent(room['id'].toString()) + '/socket',
@@ -229,13 +234,22 @@ class VoiceController extends ChangeNotifier {
       final speakerId = data['memberId'] as String?;
       final sessionId = data['sessionId'] as String?;
       if (speakerId != null && speakerId != member?['id'] && sessionId != null) {
-        unawaited(_startSubscriber(sessionId, speakerId));
+        if (_iceReady) {
+          unawaited(_startSubscriber(sessionId, speakerId));
+        } else {
+          _pendingPublisherSessionId = sessionId;
+          _pendingSpeakerId = speakerId;
+        }
       }
     } else if (type == 'ptt:released') {
       final speakerId = data['memberId'] as String?;
       if (speakerId == member?['id']) {
         unawaited(releaseTalk());
       } else {
+        if (_pendingSpeakerId == speakerId) {
+          _pendingSpeakerId = null;
+          _pendingPublisherSessionId = null;
+        }
         unawaited(_stopSubscriber());
       }
       busy = false;
@@ -256,6 +270,13 @@ class VoiceController extends ChangeNotifier {
       _iceData = await _request('/api/ice-servers');
       _iceReady = true;
       status = 'اتصال آماده است؛ برای صحبت دکمه را نگه دارید.';
+      final pendingSession = _pendingPublisherSessionId;
+      final pendingSpeaker = _pendingSpeakerId;
+      _pendingPublisherSessionId = null;
+      _pendingSpeakerId = null;
+      if (pendingSession != null && pendingSpeaker != null) {
+        unawaited(_startSubscriber(pendingSession, pendingSpeaker));
+      }
     } catch (e) {
       _iceReady = false;
       status = 'آماده‌سازی مسیر شبکه ناموفق بود: ' + e.toString();
@@ -395,6 +416,8 @@ class VoiceController extends ChangeNotifier {
 
   Future<void> _startSubscriber(String publisherSessionId, String speakerId) async {
     if (!connected || _subscriberPc != null || _activePublisherId == speakerId) return;
+    final generation = ++_subscriberGeneration;
+    _activePublisherId = speakerId;
     RTCPeerConnection? pc;
     String? sessionId;
     try {
@@ -405,6 +428,7 @@ class VoiceController extends ChangeNotifier {
           {'urls': 'stun:stun.cloudflare.com:3478'}
         ],
       });
+      if (!_isCurrentSubscriber(generation, speakerId)) throw VoiceFailure('دریافت صدا لغو شد.');
       pc.onTrack = (event) {
         if (event.track.kind == 'audio') event.track.enabled = true;
       };
@@ -415,6 +439,7 @@ class VoiceController extends ChangeNotifier {
       );
       sessionId = created['sessionId'] as String?;
       if (sessionId == null) throw VoiceFailure('شناسه دریافت صدا دریافت نشد.');
+      if (!_isCurrentSubscriber(generation, speakerId)) throw VoiceFailure('دریافت صدا لغو شد.');
 
       final subscribed = await _request(
         '/api/sfu/sessions/' + Uri.encodeComponent(sessionId) + '/subscribe',
@@ -422,6 +447,7 @@ class VoiceController extends ChangeNotifier {
         body: {'publisherSessionId': publisherSessionId},
       );
       final offer = Map<String, dynamic>.from(subscribed['sessionDescription'] as Map);
+      if (!_isCurrentSubscriber(generation, speakerId)) throw VoiceFailure('دریافت صدا لغو شد.');
       await pc.setRemoteDescription(
         RTCSessionDescription(offer['sdp'] as String?, offer['type'] as String?),
       );
@@ -430,6 +456,7 @@ class VoiceController extends ChangeNotifier {
       await _waitForIce(pc);
       final local = await pc.getLocalDescription();
       if (local?.sdp == null) throw VoiceFailure('پاسخ دریافت صدا کامل نشد.');
+      if (!_isCurrentSubscriber(generation, speakerId)) throw VoiceFailure('دریافت صدا لغو شد.');
       await _request(
         '/api/sfu/sessions/' + Uri.encodeComponent(sessionId) + '/renegotiate',
         method: 'PUT',
@@ -437,7 +464,6 @@ class VoiceController extends ChangeNotifier {
       );
       _subscriberPc = pc;
       _subscriberSessionId = sessionId;
-      _activePublisherId = speakerId;
       status = 'در حال شنیدن صدای عضو هیئت...';
       notifyListeners();
     } catch (e) {
@@ -446,6 +472,7 @@ class VoiceController extends ChangeNotifier {
       }
       try { await pc?.close(); } catch (_) {}
       try { await pc?.dispose(); } catch (_) {}
+      if (generation == _subscriberGeneration) _activePublisherId = null;
       status = 'دریافت صدا برقرار نشد: ' + e.toString();
       notifyListeners();
     }
@@ -499,12 +526,18 @@ class VoiceController extends ChangeNotifier {
     }
   }
 
+  bool _isCurrentSubscriber(int generation, String speakerId) =>
+      connected && generation == _subscriberGeneration && _activePublisherId == speakerId;
+
   Future<void> _stopSubscriber() async {
+    _subscriberGeneration++;
     final pc = _subscriberPc;
     final sessionId = _subscriberSessionId;
     _subscriberPc = null;
     _subscriberSessionId = null;
     _activePublisherId = null;
+    _pendingPublisherSessionId = null;
+    _pendingSpeakerId = null;
     try { await pc?.close(); } catch (_) {}
     try { await pc?.dispose(); } catch (_) {}
     if (sessionId != null) {
