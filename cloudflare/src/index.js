@@ -916,7 +916,7 @@ export default {
       if (response) return request.headers.get("upgrade")?.toLowerCase() === "websocket" ? response : corsResponse(request, env, response);
       const asset = await env.ASSETS.fetch(request);
       const headers = new Headers(asset.headers);
-      headers.set("content-security-policy", "default-src 'self'; script-src 'self'; connect-src 'self' wss:; media-src 'self' blob:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; upgrade-insecure-requests");
+      headers.set("content-security-policy", "default-src 'self'; script-src 'self'; connect-src 'self' wss: stun: turn: turns:; media-src 'self' blob:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; upgrade-insecure-requests");
       headers.set("x-content-type-options", "nosniff");
       headers.set("referrer-policy", "strict-origin-when-cross-origin");
       headers.set("permissions-policy", "microphone=(self), camera=()");
