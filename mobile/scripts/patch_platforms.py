@@ -35,6 +35,8 @@ if podfile.exists():
       target.build_configurations.each do |config|
         config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0'
         config.build_settings['ONLY_ACTIVE_ARCH'] = 'YES'
+        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
+        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'PERMISSION_MICROPHONE=1'
       end"""
     if needle in text and "ONLY_ACTIVE_ARCH" not in text:
         text = text.replace(needle, replacement)
