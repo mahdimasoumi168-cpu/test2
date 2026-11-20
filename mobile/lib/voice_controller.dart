@@ -415,7 +415,10 @@ class VoiceController extends ChangeNotifier {
   }
 
   Future<void> _startSubscriber(String publisherSessionId, String speakerId) async {
-    if (!connected || _subscriberPc != null || _activePublisherId == speakerId) return;
+    if (!connected || _activePublisherId == speakerId) return;
+    if (_subscriberPc != null || _activePublisherId != null) {
+      await _stopSubscriber();
+    }
     final generation = ++_subscriberGeneration;
     _activePublisherId = speakerId;
     RTCPeerConnection? pc;
@@ -472,9 +475,11 @@ class VoiceController extends ChangeNotifier {
       }
       try { await pc?.close(); } catch (_) {}
       try { await pc?.dispose(); } catch (_) {}
-      if (generation == _subscriberGeneration) _activePublisherId = null;
-      status = 'دریافت صدا برقرار نشد: ' + e.toString();
-      notifyListeners();
+      if (generation == _subscriberGeneration) {
+        _activePublisherId = null;
+        status = 'دریافت صدا برقرار نشد: ' + e.toString();
+        notifyListeners();
+      }
     }
   }
 
