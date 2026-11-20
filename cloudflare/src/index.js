@@ -96,9 +96,26 @@ async function audit(env, userId, eventType, targetId = null, details = {}) {
     "INSERT INTO security_events (user_id, event_type, details_json) VALUES (?, ?, ?)"
   ).bind(userId || null, eventType, JSON.stringify({ targetId, ...details })).run();
 }
-function sameOrigin(request) {
+function allowedOrigin(request, env) {
   const origin = request.headers.get("origin");
-  return !origin || origin === new URL(request.url).origin;
+  if (!origin || origin === new URL(request.url).origin) return true;
+  const allowed = (env.ALLOWED_ORIGINS || "capacitor://localhost,http://localhost")
+    .split(",").map(value => value.trim()).filter(Boolean);
+  return allowed.includes(origin);
+}
+function corsResponse(request, env, response) {
+  const origin = request.headers.get("origin");
+  if (!origin || origin === new URL(request.url).origin) return response;
+  const allowed = (env.ALLOWED_ORIGINS || "capacitor://localhost,http://localhost")
+    .split(",").map(value => value.trim()).filter(Boolean);
+  if (!allowed.includes(origin)) return response;
+  const headers = new Headers(response.headers);
+  headers.set("access-control-allow-origin", origin);
+  headers.set("access-control-allow-methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS");
+  headers.set("access-control-allow-headers", "Authorization, Content-Type, Sec-WebSocket-Protocol");
+  headers.set("access-control-max-age", "86400");
+  headers.append("vary", "Origin");
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 function validRoomId(value) {
   return typeof value === "string" && /^[a-z0-9_-]{1,80}$/.test(value);
@@ -299,7 +316,7 @@ async function handleApi(request, env) {
   const url = new URL(request.url);
   const path = url.pathname;
   if (!path.startsWith("/api/")) return null;
-  if (!sameOrigin(request)) return json({ error: "مبدأ درخواست معتبر نیست." }, 403);
+  if (!allowedOrigin(request, env)) return json({ error: "مبدأ درخواست معتبر نیست." }, 403);
 
   if (path === "/api/health" && request.method === "GET") {
     return json({ ok: true, service: "hamyar-heyat-cloudflare", voice: sfuConfigured(env) ? "configured" : "not-configured" });
@@ -853,9 +870,9 @@ export default {
   async fetch(request, env) {
     try {
       if (!env.DB || !env.ROOM_HUB || !env.GLOBAL_PRESENCE) return json({ error: "اتصال پایگاه داده یا اتاق‌ها تنظیم نشده است." }, 503);
-      if (request.method === "OPTIONS") return new Response(null, { status: 204 });
+      if (request.method === "OPTIONS") return corsResponse(request, env, new Response(null, { status: 204 }));
       const response = await handleApi(request, env);
-      if (response) return response;
+      if (response) return request.headers.get("upgrade")?.toLowerCase() === "websocket" ? response : corsResponse(request, env, response);
       return env.ASSETS.fetch(request);
     } catch (error) {
       console.error(JSON.stringify({ level: "error", message: error?.message || "unknown" }));
