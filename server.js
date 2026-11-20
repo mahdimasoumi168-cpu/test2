@@ -159,10 +159,13 @@ app.get("/api/rooms", requireMember, (_req, res) => {
   res.json({ rooms });
 });
 
-app.get("/api/admin/members", requireMember, requireAdmin, (_req, res) => {
+app.get("/api/admin/members", requireMember, requireAdmin, (req, res) => {
   res.set("Cache-Control", "no-store");
-  const members = db.prepare("SELECT id, full_name, role, active, created_at FROM members ORDER BY id DESC LIMIT 500").all();
-  res.json({ members });
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
+  const offset = Math.max(0, Number(req.query.offset) || 0);
+  const members = db.prepare("SELECT id, full_name, role, active, created_at FROM members ORDER BY id DESC LIMIT ? OFFSET ?").all(limit, offset);
+  const total = db.prepare("SELECT COUNT(*) AS n FROM members").get().n;
+  res.json({ members, total, nextOffset: offset + members.length < total ? offset + members.length : null });
 });
 
 app.post("/api/admin/members", requireMember, requireAdmin, (req, res) => {
@@ -180,7 +183,8 @@ app.post("/api/admin/members", requireMember, requireAdmin, (req, res) => {
 
 app.get("/api/admin/rooms", requireMember, requireAdmin, (_req, res) => {
   res.set("Cache-Control", "no-store");
-  const rooms = db.prepare("SELECT id, name, active, created_at FROM rooms ORDER BY CASE WHEN id = 'management' THEN 0 ELSE 1 END, name COLLATE NOCASE").all();
+  const rooms = db.prepare("SELECT id, name, active, max_members, created_at FROM rooms ORDER BY CASE WHEN id = 'management' THEN 0 ELSE 1 END, name COLLATE NOCASE").all()
+    .map(room => ({ ...room, connected_members: io.sockets.adapter.rooms.get(room.id)?.size || 0 }));
   res.json({ rooms });
 });
 
@@ -202,6 +206,67 @@ app.post("/api/admin/rooms", requireMember, requireAdmin, (req, res) => {
     }
     throw error;
   }
+});
+
+app.patch("/api/admin/rooms/:id", requireMember, requireAdmin, (req, res) => {
+  const id = req.params.id;
+  const name = req.body?.name === undefined ? undefined : String(req.body.name).trim().normalize("NFC");
+  const maxMembers = req.body?.maxMembers === undefined ? undefined : Number(req.body.maxMembers);
+  if (!/^([a-z0-9_-]){1,80}$/.test(id) || (name === undefined && maxMembers === undefined)) {
+    return res.status(400).json({ error: "اطلاعات ویرایش اتاق معتبر نیست." });
+  }
+  if (name !== undefined && (!name || name.length > 60)) return res.status(400).json({ error: "نام اتاق باید بین ۱ تا ۶۰ نویسه باشد." });
+  if (maxMembers !== undefined && (!Number.isInteger(maxMembers) || maxMembers < 1 || maxMembers > 500)) {
+    return res.status(400).json({ error: "ظرفیت اتاق باید عددی بین ۱ تا ۵۰۰ باشد." });
+  }
+  const existing = db.prepare("SELECT id, max_members FROM rooms WHERE id = ?").get(id);
+  if (!existing) return res.status(404).json({ error: "اتاق پیدا نشد." });
+  const connected = io.sockets.adapter.rooms.get(id)?.size || 0;
+  if (maxMembers !== undefined && maxMembers < connected) return res.status(409).json({ error: "ظرفیت جدید از تعداد اعضای متصل کمتر است." });
+  try {
+    if (name !== undefined && maxMembers !== undefined) db.prepare("UPDATE rooms SET name = ?, max_members = ? WHERE id = ?").run(name, maxMembers, id);
+    else if (name !== undefined) db.prepare("UPDATE rooms SET name = ? WHERE id = ?").run(name, id);
+    else db.prepare("UPDATE rooms SET max_members = ? WHERE id = ?").run(maxMembers, id);
+  } catch (error) {
+    if (String(error.code || "").includes("SQLITE_CONSTRAINT")) return res.status(409).json({ error: "نام اتاق تکراری است." });
+    throw error;
+  }
+  auditEvent(req.member.id, "room.updated", id, { name, maxMembers });
+  res.json({ ok: true });
+});
+
+app.patch("/api/admin/members/:id", requireMember, requireAdmin, (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id < 1) return res.status(400).json({ error: "شناسه عضو معتبر نیست." });
+  const target = db.prepare("SELECT id, role, active FROM members WHERE id = ?").get(id);
+  if (!target) return res.status(404).json({ error: "عضو پیدا نشد." });
+  const { fullName, role, guardianCode, personCode } = req.body || {};
+  if (fullName === undefined && role === undefined && guardianCode === undefined && personCode === undefined) {
+    return res.status(400).json({ error: "حداقل یک مورد برای ویرایش لازم است." });
+  }
+  if (fullName !== undefined && (typeof fullName !== "string" || !fullName.trim() || fullName.length > 120)) {
+    return res.status(400).json({ error: "نام عضو معتبر نیست." });
+  }
+  if (role !== undefined && !["member", "admin"].includes(role)) return res.status(400).json({ error: "نقش انتخاب‌شده معتبر نیست." });
+  for (const code of [guardianCode, personCode]) {
+    if (code !== undefined && (typeof code !== "string" || !code.trim() || code.length > 120)) {
+      return res.status(400).json({ error: "کد ورود باید بین ۱ تا ۱۲۰ نویسه باشد." });
+    }
+  }
+  if (target.active === 1 && target.role === "admin" && role === "member") {
+    const count = db.prepare("SELECT COUNT(*) AS n FROM members WHERE role = 'admin' AND active = 1").get().n;
+    if (count <= 1) return res.status(409).json({ error: "تغییر نقش آخرین مدیر فعال مجاز نیست." });
+  }
+  const fields = [];
+  const values = [];
+  if (fullName !== undefined) { fields.push("full_name = ?"); values.push(fullName.trim().normalize("NFC")); }
+  if (role !== undefined) { fields.push("role = ?"); values.push(role); }
+  if (guardianCode !== undefined) { fields.push("guardian_code_hash = ?"); values.push(bcrypt.hashSync(guardianCode.trim(), 12)); }
+  if (personCode !== undefined) { fields.push("person_code_hash = ?"); values.push(bcrypt.hashSync(personCode.trim(), 12)); }
+  values.push(id);
+  db.prepare("UPDATE members SET " + fields.join(", ") + " WHERE id = ?").run(...values);
+  auditEvent(req.member.id, "member.updated", id, { changed: fields.map(x => x.split(" ")[0]) });
+  res.json({ ok: true });
 });
 
 app.patch("/api/admin/rooms/:id/active", requireMember, requireAdmin, async (req, res) => {
