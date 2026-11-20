@@ -257,4 +257,4 @@ ptt.addEventListener("blur",releaseTalk);
 document.addEventListener("visibilitychange",()=>{if(document.hidden)releaseTalk();});
 window.addEventListener("blur",releaseTalk);
 window.addEventListener("pagehide",()=>{releaseTalk();});
-$("logout").addEventListener("click",()=>{closeRoom();token=null;location.reload();});
+$("logout").addEventListener("click",async()=>{closeRoom();try{await api("/api/logout",{method:"POST"});}catch{}token=null;location.reload();});
