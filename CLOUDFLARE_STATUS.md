@@ -9,8 +9,8 @@
 - شناسه پایگاه داده در تنظیمات خصوصی زیرساخت نگهداری می‌شود؛ آن را در مخزن عمومی ثبت نکنید.
 - پایگاه داده قبلاً شامل جدول‌های `users`، `rooms`، `room_members` و `security_events` بود.
 - جدول‌های اولیه خالی بودند؛ هیچ حساب عضو یا مدیر در D1 وجود نداشت.
-- Worker با نام `test2` در حساب وجود دارد، اما در زمان بازبینی صرفاً Static Assets داشت و binding اجرایی D1 یا Durable Object برای آن مشاهده نشد.
-- هیچ Durable Object namespace اجرایی برای این پروژه در زمان بازبینی اولیه مشاهده نشد؛ namespaceهای تولید و Preview پس از انتشار Wrangler ساخته می‌شوند. کد دو Durable Object در شاخه توسعه جدید اضافه شده است.
+- بررسی مستقیم تنظیمات Worker در ۲۰۲۶-۱۱-۲۰ نشان داد اسکریپت `test2` هنوز فقط Static Assets دارد؛ `has_modules=false` است و binding اجرایی D1 یا Durable Object در تنظیمات فعلی Worker ثبت نشده است. Secretهای `SESSION_SECRET`، `SFU_APP_ID` و `SFU_APP_SECRET` به‌عنوان binding محرمانه وجود دارند.
+- یک namespace با نام `test2_cloudflare-voice-phase2_RoomHub` و کلاس `RoomHub` در حساب وجود دارد، اما در فهرست namespaceها، `GlobalPresence` دیده نشد و شمار اشیای namespace موجود صفر است. فایل Wrangler شاخه توسعه هر دو کلاس را تعریف می‌کند؛ استقرار نهایی باید binding و migration هر دو کلاس را تأیید کند.
 
 ## تغییرات اعمال‌شده روی D1
 
