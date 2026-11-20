@@ -204,6 +204,14 @@ class VoiceController extends ChangeNotifier {
   void _scheduleReconnect(String reason) {
     if (_disposed || _manualDisconnect || currentRoom == null || token == null ||
         _reconnectTimer?.isActive == true) return;
+    if (reason.contains('401') || reason.contains('403') ||
+        reason.toLowerCase().contains('unauthorized')) {
+      _manualDisconnect = true;
+      audioHandler.setRoom(null);
+      status = 'نشست یا دسترسی این اتاق معتبر نیست؛ دوباره وارد حساب شوید.';
+      notifyListeners();
+      return;
+    }
     const delays = [1, 2, 4, 8, 15, 30];
     final index = _reconnectAttempts < delays.length
         ? _reconnectAttempts
