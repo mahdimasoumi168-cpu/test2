@@ -840,7 +840,7 @@ export class GlobalPresence extends DurableObject {
       "SELECT attempts FROM login_attempts WHERE ip_hash = ? AND bucket = ?",
       ipHash, bucket
     ).toArray()[0];
-    if ((row?.attempts || 0) >= 10) return false;
+    if ((row?.attempts || 0) >= 200) return false;
     this.ctx.storage.sql.exec(
       "INSERT INTO login_attempts (ip_hash, bucket, attempts) VALUES (?, ?, 1) ON CONFLICT(ip_hash, bucket) DO UPDATE SET attempts = attempts + 1",
       ipHash, bucket
