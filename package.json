@@ -11,7 +11,7 @@
     "test": "npm run test:node && npm run test:worker",
     "worker:deploy": "wrangler deploy --config wrangler.jsonc",
     "worker:preview": "wrangler preview --config wrangler.jsonc",
-    "test:node": "node scripts/check-client.js && node --test",
+    "test:node": "node scripts/check-client.js && node --test tests/server.test.js",
     "test:worker": "vitest run --config vitest.config.js"
   },
   "engines": {
