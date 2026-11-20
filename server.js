@@ -161,8 +161,13 @@ app.get("/api/rooms", requireMember, (_req, res) => {
 
 app.get("/api/admin/members", requireMember, requireAdmin, (req, res) => {
   res.set("Cache-Control", "no-store");
-  const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
-  const offset = Math.max(0, Number(req.query.offset) || 0);
+  const rawLimit = Number(req.query.limit ?? 50);
+  const rawOffset = Number(req.query.offset ?? 0);
+  if (!Number.isSafeInteger(rawLimit) || !Number.isSafeInteger(rawOffset) || rawOffset < 0) {
+    return res.status(400).json({ error: "صفحه‌بندی درخواست معتبر نیست." });
+  }
+  const limit = Math.min(100, Math.max(1, rawLimit));
+  const offset = rawOffset;
   const members = db.prepare("SELECT id, full_name, role, active, created_at FROM members ORDER BY id DESC LIMIT ? OFFSET ?").all(limit, offset);
   const total = db.prepare("SELECT COUNT(*) AS n FROM members").get().n;
   res.json({ members, total, nextOffset: offset + members.length < total ? offset + members.length : null });

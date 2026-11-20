@@ -48,6 +48,7 @@ test("authentication and admin member APIs enforce roles", { timeout: 30000 }, a
   assert.equal(listing.members.length, 2);
   const created = await fetch(base + "/api/admin/members", { method: "POST", headers: { Authorization: "Bearer " + admin.data.token, "Content-Type": "application/json" }, body: JSON.stringify({ fullName: "عضو جدید", guardianCode: "G-NEW", personCode: "P-NEW", role: "member" }) });
   assert.equal(created.status, 201);
+  const createdData = await created.json();
   const memberRooms = await fetch(base + "/api/rooms", { headers: { Authorization: "Bearer " + member.data.token } });
   assert.equal(memberRooms.status, 200);
   const initialRooms = await memberRooms.json();
@@ -99,4 +100,17 @@ test("authentication and admin member APIs enforce roles", { timeout: 30000 }, a
   assert.equal(audit.status, 200);
   const auditData = await audit.json();
   assert.ok(auditData.events.some(x => x.event_type === "member.deactivated"));
+
+  const createdMemberLogin = await login("عضو جدید", "G-NEW", "P-NEW");
+  assert.equal(createdMemberLogin.status, 200);
+  const changedCredentials = await fetch(base + "/api/admin/members/" + createdData.id, {
+    method: "PATCH",
+    headers: { Authorization: "Bearer " + admin.data.token, "Content-Type": "application/json" },
+    body: JSON.stringify({ personCode: "P-UPDATED" })
+  });
+  assert.equal(changedCredentials.status, 200);
+  const staleAfterCredentialChange = await fetch(base + "/api/me", {
+    headers: { Authorization: "Bearer " + createdMemberLogin.data.token }
+  });
+  assert.equal(staleAfterCredentialChange.status, 401);
 });
