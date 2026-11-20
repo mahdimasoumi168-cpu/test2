@@ -869,7 +869,7 @@ export class GlobalPresence extends DurableObject {
     }
     this.ctx.storage.sql.exec(
       "INSERT OR REPLACE INTO active_connections (socket_key, user_id, room_id, expires_at) VALUES (?, ?, ?, ?)",
-      socketKey, userId, roomId, now + 10 * 60 * 1000
+      socketKey, userId, roomId, now + 15 * 60 * 1000
     );
     await this.scheduleCleanup();
     return true;
@@ -879,7 +879,7 @@ export class GlobalPresence extends DurableObject {
     if (!socketKey) return false;
     this.ctx.storage.sql.exec(
       "UPDATE active_connections SET expires_at = ? WHERE socket_key = ?",
-      Date.now() + 10 * 60 * 1000, socketKey
+      Date.now() + 15 * 60 * 1000, socketKey
     );
     await this.scheduleCleanup();
     return true;
