@@ -14,7 +14,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm install
+      - run: npm install --no-audit --no-fund
       - run: node --check server.js
       - run: node --check scripts/add-member.js
+      - run: node --check public/audio-processing.js
       - run: npm test
+      - name: Build production container
+        run: docker build --pull -t hamyar-heyat:ci .

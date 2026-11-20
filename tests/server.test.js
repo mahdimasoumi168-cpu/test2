@@ -4,6 +4,7 @@ const { spawn, spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { io: connectSocket } = require("socket.io-client");
 
 test("authentication and admin member APIs enforce roles", { timeout: 30000 }, async t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hamyar-test-"));
@@ -68,4 +69,34 @@ test("authentication and admin member APIs enforce roles", { timeout: 30000 }, a
   assert.equal(activeRoomIds.includes(roomData.room.id), false);
   const invalidRoomMember = await fetch(base + "/api/admin/members/999999/active", { method: "PATCH", headers: { Authorization: "Bearer " + admin.data.token, "Content-Type": "application/json" }, body: JSON.stringify({ active: false }) });
   assert.equal(invalidRoomMember.status, 404);
+
+  const memberId = listing.members.find(x => x.full_name === "عضو آزمایشی").id;
+  const socket = connectSocket(base, { auth: { token: member.data.token }, transports: ["websocket"] });
+  t.after(() => socket.close());
+  await new Promise((resolve, reject) => {
+    socket.once("connect", resolve);
+    socket.once("connect_error", reject);
+  });
+  const managementDenied = await new Promise(resolve => socket.emit("room:join", { roomId: "management" }, resolve));
+  assert.equal(managementDenied.ok, false);
+  const joined = await new Promise(resolve => socket.emit("room:join", { roomId: "nazm" }, resolve));
+  assert.equal(joined.ok, true);
+
+  const deactivated = await fetch(base + "/api/admin/members/" + memberId + "/active", {
+    method: "PATCH",
+    headers: { Authorization: "Bearer " + admin.data.token, "Content-Type": "application/json" },
+    body: JSON.stringify({ active: false })
+  });
+  assert.equal(deactivated.status, 200);
+  await new Promise(resolve => {
+    if (!socket.connected) return resolve();
+    socket.once("disconnect", resolve);
+    setTimeout(resolve, 1500);
+  });
+  const revokedSession = await fetch(base + "/api/me", { headers: { Authorization: "Bearer " + member.data.token } });
+  assert.equal(revokedSession.status, 401);
+  const audit = await fetch(base + "/api/admin/audit?limit=20", { headers: { Authorization: "Bearer " + admin.data.token } });
+  assert.equal(audit.status, 200);
+  const auditData = await audit.json();
+  assert.ok(auditData.events.some(x => x.event_type === "member.deactivated"));
 });
