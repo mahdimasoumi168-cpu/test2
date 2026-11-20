@@ -83,6 +83,61 @@ app.use("/api/login", rateLimit({
 }));
 app.use(express.static(path.join(__dirname, "public")));
 
+function requireMember(req, res, next) {
+  const header = req.get("authorization") || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+  const member = verifySession(token);
+  if (!member) return res.status(401).json({ error: "نشست معتبر نیست؛ دوباره وارد شوید." });
+  req.member = member;
+  next();
+}
+function requireAdmin(req, res, next) {
+  if (!req.member || req.member.role !== "admin") {
+    return res.status(403).json({ error: "دسترسی مدیر لازم است." });
+  }
+  next();
+}
+
+app.get("/api/me", requireMember, (req, res) => {
+  res.set("Cache-Control", "no-store");
+  res.json({ member: { id: req.member.id, name: req.member.full_name, role: req.member.role } });
+});
+
+app.get("/api/admin/members", requireMember, requireAdmin, (_req, res) => {
+  res.set("Cache-Control", "no-store");
+  const members = db.prepare("SELECT id, full_name, role, active, created_at FROM members ORDER BY id DESC LIMIT 500").all();
+  res.json({ members });
+});
+
+app.post("/api/admin/members", requireMember, requireAdmin, (req, res) => {
+  const { fullName, guardianCode, personCode, role = "member" } = req.body || {};
+  if (![fullName, guardianCode, personCode].every(v => typeof v === "string" && v.trim().length > 0 && v.length <= 120)) {
+    return res.status(400).json({ error: "نام و هر دو کد الزامی است." });
+  }
+  if (!["member", "admin"].includes(role)) return res.status(400).json({ error: "نقش انتخاب‌شده معتبر نیست." });
+  const result = db.prepare(
+    "INSERT INTO members (full_name, guardian_code_hash, person_code_hash, role) VALUES (?, ?, ?, ?)"
+  ).run(fullName.trim().normalize("NFC"), bcrypt.hashSync(guardianCode.trim(), 12), bcrypt.hashSync(personCode.trim(), 12), role);
+  res.status(201).json({ ok: true, id: result.lastInsertRowid });
+});
+
+app.patch("/api/admin/members/:id/active", requireMember, requireAdmin, (req, res) => {
+  const id = Number(req.params.id);
+  const { active } = req.body || {};
+  if (!Number.isSafeInteger(id) || id < 1 || typeof active !== "boolean") {
+    return res.status(400).json({ error: "شناسه یا وضعیت ارسالی معتبر نیست." });
+  }
+  if (id === req.member.id && active === false) return res.status(400).json({ error: "مدیر نمی‌تواند حساب خودش را غیرفعال کند." });
+  const target = db.prepare("SELECT id, role, active FROM members WHERE id = ?").get(id);
+  if (!target) return res.status(404).json({ error: "عضو پیدا نشد." });
+  if (target.role === "admin" && target.active === 1 && active === false) {
+    const count = db.prepare("SELECT COUNT(*) AS n FROM members WHERE role = 'admin' AND active = 1").get().n;
+    if (count <= 1) return res.status(409).json({ error: "غیرفعال‌کردن آخرین مدیر مجاز نیست." });
+  }
+  db.prepare("UPDATE members SET active = ? WHERE id = ?").run(active ? 1 : 0, id);
+  res.json({ ok: true });
+});
+
 app.get("/api/health", (_req, res) => {
   res.set("Cache-Control", "no-store");
   res.json({ ok: true, service: "hamyar-heyat" });
