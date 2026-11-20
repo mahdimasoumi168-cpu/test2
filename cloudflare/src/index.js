@@ -759,6 +759,68 @@ export class RoomHub extends DurableObject {
   }
 }
 
+
+export class GlobalPresence extends DurableObject {
+  constructor(ctx, env) {
+    super(ctx, env);
+    this.ctx.storage.sql.exec(`
+      CREATE TABLE IF NOT EXISTS active_connections (
+        socket_key TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        room_id TEXT NOT NULL,
+        expires_at INTEGER NOT NULL
+      )
+    `);
+  }
+
+  async scheduleCleanup() {
+    const row = this.ctx.storage.sql.exec("SELECT MIN(expires_at) AS next_expiry FROM active_connections").toArray()[0];
+    if (row?.next_expiry) await this.ctx.storage.setAlarm(row.next_expiry);
+    else await this.ctx.storage.deleteAlarm();
+  }
+
+  async register(socketKey, userId, roomId) {
+    const now = Date.now();
+    this.ctx.storage.sql.exec("DELETE FROM active_connections WHERE expires_at <= ?", now);
+    const count = this.ctx.storage.sql.exec("SELECT COUNT(*) AS n FROM active_connections").toArray()[0]?.n || 0;
+    if (count >= MAX_ROOM_MEMBERS) {
+      await this.scheduleCleanup();
+      return false;
+    }
+    this.ctx.storage.sql.exec(
+      "INSERT OR REPLACE INTO active_connections (socket_key, user_id, room_id, expires_at) VALUES (?, ?, ?, ?)",
+      socketKey, userId, roomId, now + 10 * 60 * 1000
+    );
+    await this.scheduleCleanup();
+    return true;
+  }
+
+  async touch(socketKey) {
+    if (!socketKey) return false;
+    this.ctx.storage.sql.exec(
+      "UPDATE active_connections SET expires_at = ? WHERE socket_key = ?",
+      Date.now() + 10 * 60 * 1000, socketKey
+    );
+    await this.scheduleCleanup();
+    return true;
+  }
+
+  async unregister(socketKey) {
+    if (!socketKey) return;
+    this.ctx.storage.sql.exec("DELETE FROM active_connections WHERE socket_key = ?", socketKey);
+    await this.scheduleCleanup();
+  }
+
+  getCount() {
+    return this.ctx.storage.sql.exec("SELECT COUNT(*) AS n FROM active_connections WHERE expires_at > ?", Date.now()).toArray()[0]?.n || 0;
+  }
+
+  async alarm() {
+    this.ctx.storage.sql.exec("DELETE FROM active_connections WHERE expires_at <= ?", Date.now());
+    await this.scheduleCleanup();
+  }
+}
+
 export default {
   async fetch(request, env) {
     try {
