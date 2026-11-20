@@ -390,7 +390,11 @@ async function handleApi(request, env) {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !Array.isArray(data.iceServers)) throw new Error("TURN credential generation failed.");
-      return json({ iceServers: data.iceServers, turn: true });
+      const iceServers = data.iceServers.map(server => ({
+        ...server,
+        urls: Array.isArray(server.urls) ? server.urls.filter(value => !String(value).includes(":53")) : server.urls
+      })).filter(server => server.urls && (Array.isArray(server.urls) ? server.urls.length : true));
+      return json({ iceServers, turn: true });
     } catch (error) {
       console.warn("TURN credentials:", error.message);
       return json({ iceServers: [{ urls: "stun:stun.cloudflare.com:3478" }], turn: false });
