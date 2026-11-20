@@ -363,7 +363,7 @@ async function handleApi(request, env) {
     return json({ rooms: rooms.results || [] });
   }
 
-  if (path.startsWith("/api/sfu/")) return handleSfu(request, env, user, url);
+  if (path.startsWith("/api/sfu/")) return (await handleSfu(request, env, user, url)) || json({ error: "مسیر صوتی پیدا نشد." }, 404);
 
   if (path === "/api/admin/members" && request.method === "GET") {
     if (user.role !== "admin") return json({ error: "دسترسی مدیر لازم است." }, 403);
@@ -546,6 +546,7 @@ async function handleApi(request, env) {
     if (!room) return json({ error: "دسترسی به این اتاق مجاز نیست." }, 403);
     const headers = new Headers(request.headers);
     headers.set("sec-websocket-protocol", "hy-room-v1");
+    headers.set("x-hy-room-id", roomId);
     headers.set("x-hy-user-id", wsUser.id);
     headers.set("x-hy-user-name", wsUser.name);
     headers.set("x-hy-user-role", wsUser.role);
@@ -586,8 +587,10 @@ export class RoomHub extends DurableObject {
     const displayName = request.headers.get("x-hy-user-name");
     const role = request.headers.get("x-hy-user-role");
     const capacity = Math.min(MAX_ROOM_MEMBERS, Math.max(1, Number(request.headers.get("x-hy-room-capacity") || MAX_ROOM_MEMBERS)));
-    if (!userId || !displayName || !role) return new Response("Unauthorized", { status: 401 });
+    const roomId = request.headers.get("x-hy-room-id");
+    if (!userId || !displayName || !role || !roomId) return new Response("Unauthorized", { status: 401 });
     if (this.ctx.getWebSockets().length >= capacity) return new Response("Room is full", { status: 429 });
+    await this.ctx.storage.put("roomId", roomId);
     const pair = new WebSocketPair();
     const client = pair[0], server = pair[1];
     server.serializeAttachment({ userId, displayName, role, lastRequestAt: 0, lastHeartbeatAt: 0 });
@@ -661,16 +664,11 @@ export class RoomHub extends DurableObject {
   async announcePublisher(userId, sessionId) {
     const current = await this.getSpeaker();
     if (!current || current.userId !== userId || !sessionId) return false;
+    const roomId = await this.ctx.storage.get("roomId");
     const session = await this.env.DB.prepare(
       "SELECT id FROM sfu_sessions WHERE id = ? AND user_id = ? AND room_id = ? AND session_type = 'publisher' AND status = 'published'"
-    ).bind(sessionId, userId, this.ctx.id.toString()).first().catch(() => null);
-    // The DO name is not exposed as a room ID; validate room ownership from the current lease and session owner below.
-    if (!session) {
-      const owned = await this.env.DB.prepare(
-        "SELECT id FROM sfu_sessions WHERE id = ? AND user_id = ? AND session_type = 'publisher' AND status = 'published'"
-      ).bind(sessionId, userId).first();
-      if (!owned) return false;
-    }
+    ).bind(sessionId, userId, roomId).first();
+    if (!session) return false;
     this.ctx.storage.sql.exec("UPDATE speaker SET session_id = ? WHERE id = 1 AND user_id = ?", sessionId, userId);
     this.broadcast({ type: "ptt:published", memberId: userId, memberName: current.displayName, sessionId });
     return true;
@@ -698,8 +696,8 @@ export class RoomHub extends DurableObject {
       }
     }
     const sessions = await this.env.DB.prepare(
-      "SELECT id, mid FROM sfu_sessions WHERE user_id = ? AND room_id = ? AND session_type = 'subscriber' AND status <> 'closed'"
-    ).bind(userId, this.ctx.id.toString()).all().catch(() => ({ results: [] }));
+      "SELECT id, mid FROM sfu_sessions WHERE user_id = ? AND room_id = ? AND status <> 'closed'"
+    ).bind(userId, await this.ctx.storage.get("roomId")).all().catch(() => ({ results: [] }));
     for (const session of sessions.results || []) await closeSfuSession(this.env, session.id, session.mid);
   }
 
@@ -716,8 +714,8 @@ export class RoomHub extends DurableObject {
     if (attachment?.userId) {
       await this.releaseSpeaker(attachment.userId);
       const sessions = await this.env.DB.prepare(
-        "SELECT id, mid FROM sfu_sessions WHERE user_id = ? AND session_type = 'subscriber' AND status <> 'closed'"
-      ).bind(attachment.userId).all().catch(() => ({ results: [] }));
+        "SELECT id, mid FROM sfu_sessions WHERE user_id = ? AND room_id = ? AND status <> 'closed'"
+      ).bind(attachment.userId, await this.ctx.storage.get("roomId")).all().catch(() => ({ results: [] }));
       for (const session of sessions.results || []) await closeSfuSession(this.env, session.id, session.mid);
     }
     this.broadcast({ type: "room:presence", connected: this.ctx.getWebSockets().length });
