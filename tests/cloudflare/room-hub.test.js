@@ -62,3 +62,16 @@ describe("RoomHub Push-to-Talk lease", () => {
     });
   });
 });
+
+
+describe("GlobalPresence bootstrap rate limit", () => {
+  it("caps bootstrap attempts at ten per fifteen-minute identity bucket", async () => {
+    const presence = env.GLOBAL_PRESENCE.getByName("bootstrap-rate-" + crypto.randomUUID());
+    const attempts = await Promise.all(
+      Array.from({ length: 11 }, (_, index) => presence.allowLogin("bootstrap-ip-" + index, "bootstrap"))
+    );
+
+    expect(attempts.filter(Boolean)).toHaveLength(10);
+    expect(attempts.filter(value => value === false)).toHaveLength(1);
+  });
+});
