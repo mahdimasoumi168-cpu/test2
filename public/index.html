@@ -1,78 +1,49 @@
 <!doctype html>
 <html lang="fa" dir="rtl">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#123b68">
-  <meta name="description" content="سامانه ارتباطی همیار هیئت">
-  <link rel="manifest" href="/manifest.webmanifest">
-  <title>همیار هیئت</title>
-  <style>
-    :root{font-family:Tahoma,Arial,sans-serif;color:#172b45;background:#f2f5f9}
-    *{box-sizing:border-box}body{margin:0;min-height:100vh}
-    header{background:#123b68;color:#fff;padding:24px 18px 30px;border-radius:0 0 24px 24px}
-    header h1{margin:0 0 8px;font-size:25px}header p{margin:0;color:#d7e5f5;font-size:13px}
-    main{width:min(680px,100%);margin:-12px auto 0;padding:0 14px 30px}
-    .card{background:#fff;border:1px solid #e1e8f0;border-radius:18px;padding:18px;margin-bottom:14px;box-shadow:0 5px 20px #17395d0a}
-    label{display:block;font-size:13px;margin:12px 0 6px}
-    input{width:100%;padding:13px;border:1px solid #cbd6e2;border-radius:10px;font:inherit;background:#fff}
-    button{font:inherit;border:0;border-radius:11px;padding:13px 16px;cursor:pointer}
-    .primary{width:100%;background:#1769aa;color:#fff;margin-top:16px}
-    .muted{color:#66778b;font-size:12px;line-height:1.9}
-    .rooms{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}
-    .room{background:#edf4fb;color:#174a78;text-align:center}
-    .ptt{width:100%;min-height:100px;border-radius:18px;background:#123b68;color:#fff;font-size:21px;font-weight:bold;touch-action:none;user-select:none}
-    .ptt:active{background:#a52b36}.status{font-size:13px;color:#52677e;margin-top:10px;min-height:22px}
-    #app{display:none}#notice{font-size:13px;color:#a52b36;margin-top:10px}
-  </style>
-</head>
-<body>
-<header><h1>همیار هیئت</h1><p>سامانه ارتباط و هماهنگی اعضای هیئت</p></header>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#123b68"><meta name="description" content="سامانه ارتباطی همیار هیئت">
+<link rel="manifest" href="/manifest.webmanifest"><title>همیار هیئت</title>
+<style>
+:root{font-family:Tahoma,Arial,sans-serif;color:#172b45;background:#f2f5f9}*{box-sizing:border-box}body{margin:0;min-height:100vh}
+header{background:#123b68;color:#fff;padding:24px 18px 30px;border-radius:0 0 24px 24px}header h1{margin:0 0 8px;font-size:25px}header p{margin:0;color:#d7e5f5;font-size:13px}
+main{width:min(680px,100%);margin:-12px auto 0;padding:0 14px 30px}.card{background:#fff;border:1px solid #e1e8f0;border-radius:18px;padding:18px;margin-bottom:14px;box-shadow:0 5px 20px #17395d0a}
+label{display:block;font-size:13px;margin:12px 0 6px}input{width:100%;padding:13px;border:1px solid #cbd6e2;border-radius:10px;font:inherit;background:#fff}
+button{font:inherit;border:0;border-radius:11px;padding:13px 16px;cursor:pointer}.primary{width:100%;background:#1769aa;color:#fff;margin-top:16px}.muted{color:#66778b;font-size:12px;line-height:1.9}
+.rooms{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}.room{background:#edf4fb;color:#174a78;text-align:center}.room.selected{background:#1769aa;color:white}
+.ptt{width:100%;min-height:100px;border-radius:18px;background:#123b68;color:#fff;font-size:21px;font-weight:bold;touch-action:none;user-select:none}.ptt:active{background:#a52b36}
+.status{font-size:13px;color:#52677e;margin-top:10px;min-height:22px}#app{display:none}#notice{font-size:13px;color:#a52b36;margin-top:10px}#welcome{font-size:13px;color:#1769aa}
+</style></head>
+<body><header><h1>همیار هیئت</h1><p>سامانه ارتباط و هماهنگی اعضای هیئت</p></header>
 <main>
-  <section class="card" id="login">
-    <h2>ورود اعضا</h2>
-    <form id="loginForm">
-      <label for="fullName">نام و نام خانوادگی</label><input id="fullName" autocomplete="name" required>
-      <label for="guardianCode">کد سرپرستی</label><input id="guardianCode" autocomplete="off" required>
-      <label for="personCode">کد شخص</label><input id="personCode" autocomplete="off" required>
-      <button class="primary" type="submit">ورود به سامانه</button>
-    </form>
-    <div id="notice" role="status"></div>
-    <p class="muted">این نسخهٔ آزمایشی است؛ حساب‌ها باید توسط مدیر در سرور تعریف شوند.</p>
-  </section>
-  <section id="app">
-    <section class="card"><h2>اتاق‌های ارتباطی</h2><div class="rooms">
-      <button class="room" data-room="management">مدیریت</button><button class="room" data-room="khademin">خادمین</button>
-      <button class="room" data-room="nazm">نظم</button><button class="room" data-room="sound">صوت</button>
-      <button class="room" data-room="tadarokat">تدارکات</button><button class="room" data-room=" پذیرایی">پذیرایی</button>
-    </div></section>
-    <section class="card"><h2>ارتباط بی‌سیم</h2><button id="ptt" class="ptt">برای صحبت نگه دارید</button><div id="status" class="status">ابتدا یک اتاق انتخاب کنید.</div><p class="muted">در این نسخه، کنترل نوبت صحبت آزمایشی است و انتقال واقعی صدا هنوز متصل نشده است.</p></section>
-  </section>
-  <p class="muted">نسخهٔ اولیهٔ پروژه همیار هیئت · ارتباط واقعی پس از تکمیل سرور رسانه فعال می‌شود.</p>
+<section class="card" id="login"><h2>ورود اعضا</h2><form id="loginForm">
+<label for="fullName">نام و نام خانوادگی</label><input id="fullName" autocomplete="name" required>
+<label for="guardianCode">کد سرپرستی</label><input id="guardianCode" autocomplete="off" required>
+<label for="personCode">کد شخص</label><input id="personCode" autocomplete="off" required>
+<button class="primary" type="submit">ورود به سامانه</button></form><div id="notice" role="status"></div>
+<p class="muted">حساب کاربری باید از قبل توسط مدیر سامانه در سرور ایجاد شده باشد.</p></section>
+<section id="app">
+<section class="card"><div id="welcome"></div><h2>اتاق‌های ارتباطی</h2><div class="rooms">
+<button class="room" data-room="management">مدیریت</button><button class="room" data-room="khademin">خادمین</button>
+<button class="room" data-room="nazm">نظم</button><button class="room" data-room="sound">صوت</button>
+<button class="room" data-room="tadarokat">تدارکات</button><button class="room" data-room="paziraei">پذیرایی</button>
+</div></section>
+<section class="card"><h2>ارتباط بی‌سیم</h2><button id="ptt" class="ptt">برای صحبت نگه دارید</button><div id="status" class="status">ابتدا یک اتاق انتخاب کنید.</div>
+<p class="muted">این نسخه نوبت صحبت را مدیریت می‌کند؛ انتقال واقعی صدا از طریق WebRTC/SFU در مرحلهٔ بعد افزوده می‌شود.</p></section>
+<button id="logout" class="primary">خروج از حساب</button></section>
+<p class="muted">نسخهٔ اولیهٔ همیار هیئت · برای عملکرد عملیاتی به HTTPS و سرور رسانه نیاز است.</p>
 </main>
-<script src="/socket.io/socket.io.js"></script>
-<script>
+<script src="/socket.io/socket.io.js"></script><script>
 if("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(()=>{});
-const form=document.getElementById("loginForm"), notice=document.getElementById("notice");
-form.addEventListener("submit",async e=>{
- e.preventDefault(); notice.textContent="در حال بررسی اطلاعات...";
- try{
-  const r=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({fullName:fullName.value,guardianCode:guardianCode.value,personCode:personCode.value})});
-  const data=await r.json(); notice.textContent=data.error||"ورود انجام نشد.";
- }catch{notice.textContent="ارتباط با سرور برقرار نشد."}
-});
-let socket=null,room=null,holding=false;
-document.querySelectorAll("[data-room]").forEach(b=>b.addEventListener("click",()=>{
- room=b.dataset.room;
- if(!socket)socket=io();
- socket.emit("room:join",{roomId:room});
- document.getElementById("status").textContent="اتاق انتخاب‌شده: "+b.textContent+" · آمادهٔ درخواست نوبت صحبت";
-}));
-const ptt=document.getElementById("ptt"),status=document.getElementById("status");
-function request(){if(!room||!socket||holding)return;holding=true;socket.emit("ptt:request",{roomId:room});}
+const $=id=>document.getElementById(id), form=$("loginForm"), notice=$("notice");
+let token=null,socket=null,room=null,holding=false;
+form.addEventListener("submit",async e=>{e.preventDefault();notice.textContent="در حال بررسی اطلاعات...";
+try{const r=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({fullName:$("fullName").value,guardianCode:$("guardianCode").value,personCode:$("personCode").value})});
+const data=await r.json();if(!r.ok)throw new Error(data.error||"ورود انجام نشد.");token=data.token;$("login").style.display="none";$("app").style.display="block";$("welcome").textContent="خوش آمدید، "+data.member.name;connect();}catch(err){notice.textContent=err.message||"ارتباط با سرور برقرار نشد."}});
+function connect(){socket=io({auth:{token}});socket.on("connect_error",()=>{$("status").textContent="اتصال امن برقرار نشد؛ دوباره وارد شوید."});socket.on("ptt:granted",d=>$("status").textContent="نوبت صحبت در اختیار "+d.memberName+" است؛ انتقال صدا هنوز اضافه نشده.");socket.on("ptt:busy",()=>$("status").textContent="فرد دیگری در حال صحبت است.");socket.on("ptt:released",()=>$("status").textContent="کانال آزاد شد.");}
+document.querySelectorAll("[data-room]").forEach(b=>b.addEventListener("click",()=>{if(!socket||!socket.connected)return;room=b.dataset.room;document.querySelectorAll(".room").forEach(x=>x.classList.toggle("selected",x===b));socket.emit("room:join",{roomId:room});$("status").textContent="اتاق انتخاب‌شده: "+b.textContent+" · آمادهٔ صحبت";}));
+const ptt=$("ptt");function request(){if(!room||!socket||!socket.connected||holding)return;holding=true;socket.emit("ptt:request",{roomId:room});}
 function release(){if(!holding)return;holding=false;if(socket&&room)socket.emit("ptt:release",{roomId:room});}
-ptt.addEventListener("pointerdown",e=>{e.preventDefault();request()});
-["pointerup","pointercancel","pointerleave"].forEach(ev=>ptt.addEventListener(ev,release));
-if(window.io){const s=io();s.on("ptt:granted",()=>status.textContent="نوبت صحبت شماست (صدای واقعی هنوز پیاده‌سازی نشده).");s.on("ptt:busy",()=>status.textContent="فرد دیگری در حال صحبت است.");s.on("ptt:released",()=>status.textContent="کانال آزاد شد.");}
-</script>
-</body></html>
+ptt.addEventListener("pointerdown",e=>{e.preventDefault();request()});["pointerup","pointercancel","pointerleave"].forEach(ev=>ptt.addEventListener(ev,release));
+$("logout").addEventListener("click",()=>{if(socket)socket.disconnect();token=null;location.reload();});
+</script></body></html>
