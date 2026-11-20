@@ -45,8 +45,6 @@ if podfile.exists():
 for gradle_path in (root / "android/app/build.gradle.kts", root / "android/app/build.gradle"):
     if gradle_path.exists():
         gradle = gradle_path.read_text()
-        gradle = gradle.replace("compileSdk = flutter.compileSdkVersion", "compileSdk = 37")
-        gradle = gradle.replace("compileSdkVersion flutter.compileSdkVersion", "compileSdkVersion 37")
         gradle = gradle.replace("minSdk = flutter.minSdkVersion", "minSdk = 23")
         gradle = gradle.replace("minSdkVersion flutter.minSdkVersion", "minSdkVersion 23")
         gradle_path.write_text(gradle)
