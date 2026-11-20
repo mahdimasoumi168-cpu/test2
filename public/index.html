@@ -11,7 +11,7 @@ main{width:min(680px,100%);margin:-12px auto 0;padding:0 14px 30px}.card{backgro
 label{display:block;font-size:13px;margin:12px 0 6px}input{width:100%;padding:13px;border:1px solid #cbd6e2;border-radius:10px;font:inherit;background:#fff}
 button{font:inherit;border:0;border-radius:11px;padding:13px 16px;cursor:pointer}.primary{width:100%;background:#1769aa;color:#fff;margin-top:16px}.muted{color:#66778b;font-size:12px;line-height:1.9}
 .rooms{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}.room{background:#edf4fb;color:#174a78;text-align:center}.room.selected{background:#1769aa;color:white}
-.ptt{width:100%;min-height:100px;border-radius:18px;background:#123b68;color:#fff;font-size:21px;font-weight:bold;touch-action:none;user-select:none}.ptt:active{background:#a52b36}
+.ptt{width:100%;min-height:100px;border-radius:18px;background:#123b68;color:#fff;font-size:21px;font-weight:bold;touch-action:none;user-select:none}.ptt:active{background:#a52b36}.ptt:disabled{opacity:.5;cursor:not-allowed}
 .status{font-size:13px;color:#52677e;margin-top:10px;min-height:22px}#app{display:none}#notice{font-size:13px;color:#a52b36;margin-top:10px}#welcome{font-size:13px;color:#1769aa}
 </style></head>
 <body><header><h1>همیار هیئت</h1><p>سامانه ارتباط و هماهنگی اعضای هیئت</p></header>
@@ -21,33 +21,76 @@ button{font:inherit;border:0;border-radius:11px;padding:13px 16px;cursor:pointer
 <label for="guardianCode">کد سرپرستی</label><input id="guardianCode" autocomplete="off" required>
 <label for="personCode">کد شخص</label><input id="personCode" autocomplete="off" required>
 <button class="primary" type="submit">ورود به سامانه</button></form><div id="notice" role="status"></div>
-<p class="muted">حساب کاربری باید از قبل توسط مدیر سامانه در سرور ایجاد شده باشد.</p></section>
+<p class="muted">حساب کاربری باید از قبل توسط مدیر سامانه ایجاد شده باشد.</p></section>
 <section id="app">
 <section class="card"><div id="welcome"></div><h2>اتاق‌های ارتباطی</h2><div class="rooms">
 <button class="room" data-room="management">مدیریت</button><button class="room" data-room="khademin">خادمین</button>
 <button class="room" data-room="nazm">نظم</button><button class="room" data-room="sound">صوت</button>
 <button class="room" data-room="tadarokat">تدارکات</button><button class="room" data-room="paziraei">پذیرایی</button>
-</div></section>
-<section class="card"><h2>ارتباط بی‌سیم</h2><button id="ptt" class="ptt">برای صحبت نگه دارید</button><div id="status" class="status">ابتدا یک اتاق انتخاب کنید.</div>
-<p class="muted">این نسخه نوبت صحبت را مدیریت می‌کند؛ انتقال واقعی صدا از طریق WebRTC/SFU در مرحلهٔ بعد افزوده می‌شود.</p></section>
+</div><div id="roomNotice" class="muted"></div></section>
+<section class="card"><h2>ارتباط بی‌سیم</h2><button id="ptt" class="ptt" disabled>برای صحبت نگه دارید</button><div id="status" class="status">ابتدا یک اتاق انتخاب کنید.</div>
+<p class="muted">کنترل نوبت صحبت در این مرحله فعال است؛ انتقال واقعی صدا و دریافت در پس‌زمینه هنوز به سرویس صوتی و اپلیکیشن‌های بومی متصل نشده است. حداکثر زمان هر نوبت آزمایشی ۳۰ ثانیه است.</p></section>
 <button id="logout" class="primary">خروج از حساب</button></section>
-<p class="muted">نسخهٔ اولیهٔ همیار هیئت · برای عملکرد عملیاتی به HTTPS و سرور رسانه نیاز است.</p>
+<p class="muted">نسخه توسعه همیار هیئت · ظرفیت هدف ۱۰۰ عضو هم‌زمان · تا تکمیل و آزمایش انتقال صدا برای استفاده عملیاتی آماده نیست.</p>
 </main>
-<script src="/socket.io/socket.io.js"></script><script>
+<script>
 if("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(()=>{});
 const $=id=>document.getElementById(id), form=$("loginForm"), notice=$("notice");
-let token=null,socket=null,room=null,holding=false;
-form.addEventListener("submit",async e=>{e.preventDefault();notice.textContent="در حال بررسی اطلاعات...";
-try{const r=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({fullName:$("fullName").value,guardianCode:$("guardianCode").value,personCode:$("personCode").value})});
-const data=await r.json();if(!r.ok)throw new Error(data.error||"ورود انجام نشد.");token=data.token;$("login").style.display="none";$("app").style.display="block";$("welcome").textContent="خوش آمدید، "+data.member.name;connect();}catch(err){notice.textContent=err.message||"ارتباط با سرور برقرار نشد."}});
-function connect(){socket=io({auth:{token},reconnection:true,reconnectionAttempts:Infinity,reconnectionDelay:1000,reconnectionDelayMax:10000});socket.on("connect_error",()=>{$("status").textContent="اتصال امن برقرار نشد؛ در حال تلاش مجدد...";release();});socket.on("disconnect",()=>{release();$("status").textContent="ارتباط قطع شد؛ در حال اتصال مجدد...";});socket.on("connect",()=>{$("status").textContent=room?"اتصال برقرار شد؛ اتاق را دوباره انتخاب کنید.":"اتصال برقرار شد؛ یک اتاق انتخاب کنید.";room=null;document.querySelectorAll(".room").forEach(x=>x.classList.remove("selected"));});socket.on("ptt:granted",d=>$("status").textContent="نوبت صحبت در اختیار "+d.memberName+" است؛ انتقال واقعی صدا هنوز فعال نشده.");socket.on("ptt:busy",d=>$("status").textContent=d.memberName?"اکنون "+d.memberName+" در حال صحبت است.":"فرد دیگری در حال صحبت است.");socket.on("ptt:released",()=>$("status").textContent="کانال آزاد شد.");}
-document.querySelectorAll("[data-room]").forEach(b=>b.addEventListener("click",()=>{if(!socket||!socket.connected)return;room=b.dataset.room;document.querySelectorAll(".room").forEach(x=>x.classList.toggle("selected",x===b));socket.emit("room:join",{roomId:room});$("status").textContent="اتاق انتخاب‌شده: "+b.textContent+" · آمادهٔ صحبت";}));
-const ptt=$("ptt");let heartbeat=null;
-function request(){if(!room||!socket||!socket.connected||holding)return;holding=true;try{ptt.setPointerCapture?.(window.event?.pointerId);}catch{}socket.emit("ptt:request",{roomId:room});heartbeat=setInterval(()=>{if(holding&&socket&&socket.connected&&room)socket.emit("ptt:heartbeat",{roomId:room});},5000);}
-function release(){if(!holding)return;holding=false;if(heartbeat){clearInterval(heartbeat);heartbeat=null;}if(socket&&socket.connected&&room)socket.emit("ptt:release",{roomId:room});}
-ptt.addEventListener("pointerdown",e=>{e.preventDefault();try{ptt.setPointerCapture(e.pointerId);}catch{}request()});
-["pointerup","pointercancel","lostpointercapture"].forEach(ev=>ptt.addEventListener(ev,release));
-document.addEventListener("visibilitychange",()=>{if(document.hidden)release();});
-window.addEventListener("pagehide",release);
-$("logout").addEventListener("click",()=>{if(socket)socket.disconnect();token=null;location.reload();});
+let member=null, socket=null, room=null, holding=false;
+form.addEventListener("submit",async e=>{
+  e.preventDefault(); notice.textContent="در حال بررسی اطلاعات...";
+  try{
+    const r=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({fullName:$("fullName").value,guardianCode:$("guardianCode").value,personCode:$("personCode").value})});
+    const data=await r.json(); if(!r.ok) throw new Error(data.error||"ورود انجام نشد.");
+    member=data.member; $("login").style.display="none"; $("app").style.display="block";
+    $("welcome").textContent="خوش آمدید، "+member.name; await loadRooms();
+  }catch(err){notice.textContent=err.message||"ارتباط با سرور برقرار نشد."}
+});
+async function loadRooms(){
+  const r=await fetch("/api/rooms",{credentials:"same-origin"}); const data=await r.json();
+  if(!r.ok) throw new Error(data.error||"دریافت اتاق‌ها انجام نشد.");
+  const allowed=new Set((data.rooms||[]).map(x=>x.id));
+  document.querySelectorAll("[data-room]").forEach(b=>{b.hidden=!allowed.has(b.dataset.room)});
+  $("roomNotice").textContent=allowed.size?"اتاق‌های مجاز حساب شما نمایش داده شده‌اند.":"هنوز اتاقی برای این حساب اختصاص داده نشده است.";
+}
+function setStatus(text){$("status").textContent=text}
+function closeSocket(){
+  holding=false;
+  if(socket){try{if(socket.readyState===WebSocket.OPEN)socket.send(JSON.stringify({type:"ptt:release"}));}catch{}socket.close();socket=null;}
+  room=null; $("ptt").disabled=true;
+  document.querySelectorAll(".room").forEach(x=>x.classList.remove("selected"));
+}
+document.querySelectorAll("[data-room]").forEach(b=>b.addEventListener("click",()=>{
+  closeSocket(); room=b.dataset.room;
+  document.querySelectorAll(".room").forEach(x=>x.classList.toggle("selected",x===b));
+  const scheme=location.protocol==="https:"?"wss:":"ws:";
+  const current=new WebSocket(scheme+"//"+location.host+"/api/rooms/"+encodeURIComponent(room)+"/socket");
+  socket=current;
+  current.addEventListener("open",()=>{if(socket!==current)return;$("ptt").disabled=false;setStatus("به اتاق "+b.textContent+" متصل شدید؛ آماده دریافت مجوز صحبت.");});
+  current.addEventListener("message",event=>{
+    if(socket!==current)return;
+    let data;try{data=JSON.parse(event.data)}catch{return}
+    if(data.type==="room:ready")setStatus("اتصال برقرار است · افراد حاضر: "+data.connected+" · ظرفیت: "+data.capacity);
+    if(data.type==="room:presence")setStatus("تعداد اعضای متصل: "+data.connected);
+    if(data.type==="ptt:granted")setStatus(data.memberId===member.id?"نوبت صحبت برای شما صادر شد؛ انتقال صوت هنوز فعال نشده است.":"اکنون "+data.memberName+" در حال صحبت است.");
+    if(data.type==="ptt:busy")setStatus("اکنون "+data.memberName+" در حال صحبت است.");
+    if(data.type==="ptt:released")setStatus("کانال آزاد شد.");
+  });
+  current.addEventListener("close",()=>{if(socket!==current)return;$("ptt").disabled=true;holding=false;setStatus("ارتباط قطع شد؛ برای اتصال دوباره اتاق را انتخاب کنید.");});
+  current.addEventListener("error",()=>{if(socket===current)setStatus("خطا در اتصال اتاق.");});
+}));
+function requestTalk(){
+  if(!socket||socket.readyState!==WebSocket.OPEN||!room||holding)return;
+  holding=true;socket.send(JSON.stringify({type:"ptt:request"}));
+}
+function releaseTalk(){
+  if(!holding)return;holding=false;
+  if(socket&&socket.readyState===WebSocket.OPEN)socket.send(JSON.stringify({type:"ptt:release"}));
+}
+const ptt=$("ptt");
+ptt.addEventListener("pointerdown",e=>{e.preventDefault();try{ptt.setPointerCapture(e.pointerId)}catch{}requestTalk()});
+["pointerup","pointercancel","lostpointercapture"].forEach(ev=>ptt.addEventListener(ev,releaseTalk));
+document.addEventListener("visibilitychange",()=>{if(document.hidden)releaseTalk()});
+window.addEventListener("pagehide",releaseTalk);
+$("logout").addEventListener("click",async()=>{closeSocket();await fetch("/api/logout",{method:"POST",credentials:"same-origin"});location.reload()});
 </script></body></html>
