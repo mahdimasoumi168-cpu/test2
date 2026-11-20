@@ -14,7 +14,9 @@
       "/audio-processing.js",
       "/manifest.webmanifest",
       "/styles.css",
-      "/sw.js"
+      "/sw.js",
+      "/setup.html",
+      "/setup.js"
     ]
   },
   "d1_databases": [
