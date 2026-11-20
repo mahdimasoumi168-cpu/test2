@@ -391,7 +391,7 @@ async function handleApi(request, env) {
       const response = await fetch("https://rtc.live.cloudflare.com/v1/turn/keys/" + env.TURN_KEY_ID + "/credentials/generate-ice-servers", {
         method: "POST",
         headers: { authorization: "Bearer " + env.TURN_KEY_SECRET, "content-type": "application/json" },
-        body: JSON.stringify({ ttl: 43200 })
+        body: JSON.stringify({ ttl: 172800 })
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !Array.isArray(data.iceServers)) throw new Error("TURN credential generation failed.");
