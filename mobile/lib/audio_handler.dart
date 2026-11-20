@@ -1,8 +1,10 @@
 import 'package:audio_service/audio_service.dart';
-import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 class HamyarAudioHandler extends BaseAudioHandler {
   String? _roomName;
+  Future<void> Function()? onPauseAudio;
+  Future<void> Function()? onResumeAudio;
+  Future<void> Function()? onStopRoom;
   Future<void> Function()? onStopRoom;
 
   void setRoom(String? roomName) {
@@ -39,13 +41,13 @@ class HamyarAudioHandler extends BaseAudioHandler {
 
   @override
   Future<void> play() async {
-    await Helper.resumeAudioPlayout();
+    await onResumeAudio?.call();
     playbackState.add(playbackState.value.copyWith(playing: true));
   }
 
   @override
   Future<void> pause() async {
-    await Helper.pauseAudioPlayout();
+    await onPauseAudio?.call();
     playbackState.add(playbackState.value.copyWith(playing: false));
   }
 
