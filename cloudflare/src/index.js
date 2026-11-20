@@ -1,8 +1,8 @@
 import { DurableObject } from "cloudflare:workers";
 
 const SESSION_SECONDS = 12 * 60 * 60;
-const PTT_LEASE_MS = 20000;
-const PTT_HEARTBEAT_MIN_INTERVAL_MS = 2000;
+const PTT_LEASE_MS = 30000;
+const PTT_HEARTBEAT_MIN_INTERVAL_MS = 3000;
 const MAX_ROOM_MEMBERS = 100;
 const encoder = new TextEncoder();
 
