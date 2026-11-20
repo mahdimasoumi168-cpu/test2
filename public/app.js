@@ -186,7 +186,7 @@ function connectRoom(nextRoom,button){
     if(socket!==current)return;
     $("ptt").disabled=false;
     setStatus("به اتاق "+button.textContent+" متصل شدید؛ آماده دریافت صدا.");
-    roomHeartbeat=setInterval(()=>{if(socket===current&&current.readyState===WebSocket.OPEN)current.send(JSON.stringify({type:"room:heartbeat"}));},240000);
+    roomHeartbeat=setInterval(()=>{if(socket===current&&current.readyState===WebSocket.OPEN)current.send(JSON.stringify({type:"room:heartbeat"}));},300000);
   });
   current.addEventListener("message",event=>{
     if(socket!==current)return;
@@ -239,7 +239,7 @@ function request(){
   if(!room||!isSocketOpen()||holding)return;
   holding=true;talkGeneration++;
   sendSocket("ptt:request");
-  heartbeat=setInterval(()=>{if(holding&&isSocketOpen())sendSocket("ptt:heartbeat");},5000);
+  heartbeat=setInterval(()=>{if(holding&&isSocketOpen())sendSocket("ptt:heartbeat");},8000);
 }
 function releaseTalk(){
   if(!holding)return;
