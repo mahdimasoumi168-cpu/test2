@@ -30,6 +30,10 @@ test("authentication and admin member APIs enforce roles", { timeout: 30000 }, a
     await new Promise(resolve => setTimeout(resolve, 150));
   }
   assert.equal(ready, true, "server did not become ready");
+  const home = await fetch(base + "/");
+  assert.equal(home.status, 200);
+  assert.match(home.headers.get("content-security-policy") || "", /script-src 'self'/);
+  assert.doesNotMatch(await home.text(), /<script>\s*[\s\S]*?<\/script>/i);
   const login = async (fullName, guardianCode, personCode) => {
     const r = await fetch(base + "/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fullName, guardianCode, personCode }) });
     return { status: r.status, data: await r.json() };

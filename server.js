@@ -125,7 +125,24 @@ function verifySession(token) {
 }
 
 app.disable("x-powered-by");
-app.use(helmet({ contentSecurityPolicy: false }));
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      baseUri: ["'self'"],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+      formAction: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'"],
+      imgSrc: ["'self'", "data:"],
+      fontSrc: ["'self'", "data:"],
+      connectSrc: ["'self'", "wss:", "https:", "stun:", "turn:", "turns:"],
+      mediaSrc: ["'self'", "blob:"],
+      workerSrc: ["'self'", "blob:"]
+    }
+  }
+}));
 app.use(express.json({ limit: "16kb" }));
 app.use("/api/admin", rateLimit({
   windowMs: 15 * 60 * 1000,
