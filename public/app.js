@@ -121,12 +121,10 @@ async function startPublisher(){
 async function startSubscriber(publisherSessionId){
   if(!publisherSessionId||!room||!isSocketOpen())return;
   if(subscriber?.publisherSessionId===publisherSessionId)return;
+  await cleanupSubscriber();
   const generation=++subscriberGeneration;
   let sessionId=null,pc=null;
-  const stillCurrent=()=>generation===subscriberGeneration&&Boolean(room)&&isSocketOpen();
-  await cleanupSubscriber();
-  const ownGeneration=subscriberGeneration;
-  const valid=()=>ownGeneration===subscriberGeneration&&Boolean(room)&&isSocketOpen();
+  const valid=()=>generation===subscriberGeneration&&Boolean(room)&&isSocketOpen();
   try{
     const created=await api("/api/sfu/sessions",{method:"POST",body:JSON.stringify({roomId:room,type:"subscriber"})});
     sessionId=created.sessionId;
