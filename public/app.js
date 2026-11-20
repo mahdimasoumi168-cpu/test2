@@ -206,6 +206,7 @@ function connectRoom(nextRoom,button){
       else setStatus("صدای شما برای اعضای اتاق ارسال می‌شود.");
     }
     if(data.type==="ptt:busy")setStatus(data.memberName?"اکنون "+data.memberName+" در حال صحبت است.":"فرد دیگری در حال صحبت است.");
+    if(data.type==="ptt:publish-rejected"){setStatus("مجوز انتشار صدا معتبر نماند؛ کانال آزاد شد.");releaseTalk();}
     if(data.type==="ptt:released"){
       activeSpeakerName="";
       cleanupSubscriber();
