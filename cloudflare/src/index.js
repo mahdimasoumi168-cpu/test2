@@ -218,9 +218,6 @@ async function handleSfu(request, env, user, url) {
     const session = await env.DB.prepare("SELECT * FROM sfu_sessions WHERE id = ? AND user_id = ? AND session_type = 'publisher' AND status = 'created'")
       .bind(sessionId, user.id).first();
     if (!session) return json({ error: "نشست انتشار معتبر نیست." }, 404);
-    const hub = env.ROOM_HUB.getByName(session.room_id);
-    const speaker = await hub.getSpeaker();
-    if (!speaker || speaker.userId !== user.id || speaker.connectionKey !== body.connectionKey) return json({ error: "مجوز صحبت منقضی شده یا به این اتصال تعلق ندارد." }, 409);
     let body;
     try { body = await request.json(); } catch { return json({ error: "توضیحات اتصال معتبر نیست." }, 400); }
     if (!body.sessionDescription || body.sessionDescription.type !== "offer" ||
@@ -229,6 +226,9 @@ async function handleSfu(request, env, user, url) {
         typeof body.connectionKey !== "string" || body.connectionKey.length > 80) {
       return json({ error: "پیشنهاد WebRTC یا شناسه ترک معتبر نیست." }, 400);
     }
+    const hub = env.ROOM_HUB.getByName(session.room_id);
+    const speaker = await hub.getSpeaker();
+    if (!speaker || speaker.userId !== user.id || speaker.connectionKey !== body.connectionKey) return json({ error: "مجوز صحبت منقضی شده یا به این اتصال تعلق ندارد." }, 409);
     try {
       const result = await sfuRequest(env, "/sessions/" + encodeURIComponent(sessionId) + "/tracks/new", "POST", {
         sessionDescription: body.sessionDescription,
