@@ -681,7 +681,8 @@ export class RoomHub extends DurableObject {
     }
 
     if (message.type === "ptt:published") {
-      await this.announcePublisher(attachment.userId, message.sessionId);
+      const announced = await this.announcePublisher(attachment.userId, message.sessionId);
+      if (!announced) socket.send(JSON.stringify({ type: "ptt:publish-rejected" }));
       return;
     }
     if (message.type === "room:heartbeat") {
