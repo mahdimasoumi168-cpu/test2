@@ -54,9 +54,6 @@
   "previews": {
     "vars": {
       "ENVIRONMENT": "preview",
-      "SESSION_SECRET": "preview-only-session-secret-not-for-production-2026",
-      "BOOTSTRAP_ADMIN_KEY": "preview-only-bootstrap-key-not-for-production",
-      "CODE_PEPPER": "preview-only-code-pepper-not-for-production-2026",
       "ALLOWED_ORIGINS": "capacitor://localhost,http://localhost"
     },
     "d1_databases": [
