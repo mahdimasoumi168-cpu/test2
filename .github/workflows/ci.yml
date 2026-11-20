@@ -21,6 +21,8 @@ jobs:
       - run: node --check scripts/add-member.js
       - run: node --check public/audio-processing.js
       - run: node --check public/app.js
+      - run: node --check public/setup.js
+      - run: node --check scripts/embed-assets.js
       - run: node --check cloudflare/src/index.js
       - run: node --check cloudflare/src/embedded-assets.js
       - run: npx wrangler deploy --dry-run --config wrangler.jsonc
