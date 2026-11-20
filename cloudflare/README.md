@@ -65,7 +65,7 @@ Use your own administrator name and codes. The endpoint refuses to create anothe
 - A global Durable Object caps all active room connections at 100 across the whole service.
 - Room presence has expiring leases; clients refresh the lease every four minutes.
 - Cloudflare Realtime SFU handles publication and subscription. Audio is constrained to a target maximum of 20 kbps per sender to control free egress consumption.
-- TURN credentials are generated for authenticated members with a 12-hour TTL.
+- TURN credentials are generated for authenticated members with a 48-hour TTL (Cloudflare's maximum).
 - PWA foreground audio is implemented in the branch; background playback while iOS/Android suspends the web page is not guaranteed.
 
 ## Zero-cost constraints
