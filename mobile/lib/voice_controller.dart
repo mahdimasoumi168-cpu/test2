@@ -49,6 +49,9 @@ class VoiceController extends ChangeNotifier {
   StreamSubscription<dynamic>? _socketSubscription;
   Timer? _roomHeartbeat;
   Timer? _pttHeartbeat;
+  Timer? _reconnectTimer;
+  int _reconnectAttempts = 0;
+  bool _manualDisconnect = false;
   Map<String, dynamic>? _iceData;
   RTCPeerConnection? _publisherPc;
   MediaStream? _microphone;
@@ -148,6 +151,8 @@ class VoiceController extends ChangeNotifier {
   Future<void> connectRoom(Map<String, dynamic> room) async {
     if (token == null) return;
     await disconnectRoom();
+    _manualDisconnect = false;
+    _reconnectAttempts = 0;
     error = null;
     currentRoom = room;
     connectionKey = null;
@@ -155,7 +160,12 @@ class VoiceController extends ChangeNotifier {
     _iceReady = false;
     status = 'در حال اتصال به اتاق ' + (room['name']?.toString() ?? '') + '...';
     notifyListeners();
+    await _openRoomSocket(room);
+  }
 
+  Future<void> _openRoomSocket(Map<String, dynamic> room) async {
+    if (_disposed || _manualDisconnect || token == null ||
+        currentRoom?['id'] != room['id']) return;
     try {
       await Helper.ensureAudioSession();
       await Helper.setSpeakerphoneOnButPreferBluetooth();
@@ -172,6 +182,11 @@ class VoiceController extends ChangeNotifier {
       );
       _channel = channel;
       await channel.ready.timeout(const Duration(seconds: 15));
+      if (_channel != channel || _manualDisconnect ||
+          currentRoom?['id'] != room['id']) {
+        await channel.sink.close();
+        return;
+      }
       _socketSubscription = channel.stream.listen(
         _onSocketMessage,
         onError: (Object e) => _onSocketClosed('ارتباط اتاق قطع شد: ' + e.toString()),
@@ -179,12 +194,32 @@ class VoiceController extends ChangeNotifier {
         cancelOnError: true,
       );
     } catch (e) {
-      error = e.toString();
-      status = error!;
-      connected = false;
-      notifyListeners();
-      await disconnectRoom();
+      final failed = _channel;
+      _channel = null;
+      try { await failed?.sink.close(); } catch (_) {}
+      _scheduleReconnect('اتصال برقرار نشد: ' + e.toString());
     }
+  }
+
+  void _scheduleReconnect(String reason) {
+    if (_disposed || _manualDisconnect || currentRoom == null || token == null ||
+        _reconnectTimer?.isActive == true) return;
+    const delays = [1, 2, 4, 8, 15, 30];
+    final index = _reconnectAttempts < delays.length
+        ? _reconnectAttempts
+        : delays.length - 1;
+    final seconds = delays[index];
+    _reconnectAttempts++;
+    status = reason + ' تلاش مجدد تا ' + seconds.toString() + ' ثانیه دیگر...';
+    notifyListeners();
+    final room = currentRoom!;
+    _reconnectTimer = Timer(Duration(seconds: seconds), () {
+      _reconnectTimer = null;
+      if (!_manualDisconnect && currentRoom?['id'] == room['id'] &&
+          token != null && !connected) {
+        unawaited(_openRoomSocket(room));
+      }
+    });
   }
 
   void _onSocketMessage(dynamic raw) {
@@ -205,6 +240,9 @@ class VoiceController extends ChangeNotifier {
         return;
       }
       connected = true;
+      _reconnectAttempts = 0;
+      _reconnectTimer?.cancel();
+      _reconnectTimer = null;
       status = 'به اتاق ' + (currentRoom?['name']?.toString() ?? '') +
           ' متصل شدید؛ در حال آماده‌سازی صدا...';
       _roomHeartbeat?.cancel();
@@ -572,20 +610,31 @@ class VoiceController extends ChangeNotifier {
 
   void _onSocketClosed(String message) {
     if (_disposed || _channel == null) return;
+    _channel = null;
+    _socketSubscription?.cancel();
+    _socketSubscription = null;
     connected = false;
     connectionKey = null;
     _iceReady = false;
     _remoteAudioTrack = null;
-    status = message;
     _roomHeartbeat?.cancel();
     _roomHeartbeat = null;
     unawaited(releaseTalk());
     unawaited(_stopSubscriber());
-    audioHandler.setRoom(null);
+    if (currentRoom != null && token != null && !_manualDisconnect) {
+      audioHandler.setRoom(currentRoom?['name']?.toString());
+      _scheduleReconnect(message);
+    } else {
+      audioHandler.setRoom(null);
+      status = message;
+    }
     notifyListeners();
   }
 
   Future<void> disconnectRoom() async {
+    _manualDisconnect = true;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
     _roomHeartbeat?.cancel();
     _roomHeartbeat = null;
     _pttHeartbeat?.cancel();
@@ -622,6 +671,7 @@ class VoiceController extends ChangeNotifier {
     _disposed = true;
     _roomHeartbeat?.cancel();
     _pttHeartbeat?.cancel();
+    _reconnectTimer?.cancel();
     _socketSubscription?.cancel();
     _channel?.sink.close();
     _http.close();
