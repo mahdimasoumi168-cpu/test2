@@ -46,6 +46,9 @@ test("authentication and admin member APIs enforce roles", { timeout: 30000 }, a
   assert.equal(allowed.status, 200);
   const listing = await allowed.json();
   assert.equal(listing.members.length, 2);
+  const searched = await fetch(base + "/api/admin/members?q=" + encodeURIComponent("عضو آزمایشی"), { headers: { Authorization: "Bearer " + admin.data.token } });
+  assert.equal(searched.status, 200);
+  assert.equal((await searched.json()).members.length, 1);
   const created = await fetch(base + "/api/admin/members", { method: "POST", headers: { Authorization: "Bearer " + admin.data.token, "Content-Type": "application/json" }, body: JSON.stringify({ fullName: "عضو جدید", guardianCode: "G-NEW", personCode: "P-NEW", role: "member" }) });
   assert.equal(created.status, 201);
   const createdData = await created.json();

@@ -176,8 +176,14 @@ app.get("/api/admin/members", requireMember, requireAdmin, (req, res) => {
   }
   const limit = Math.min(100, Math.max(1, rawLimit));
   const offset = rawOffset;
-  const members = db.prepare("SELECT id, full_name, role, active, created_at FROM members ORDER BY id DESC LIMIT ? OFFSET ?").all(limit, offset);
-  const total = db.prepare("SELECT COUNT(*) AS n FROM members").get().n;
+  const query = typeof req.query.q === "string" ? req.query.q.trim().slice(0, 80) : "";
+  const pattern = "%" + query + "%";
+  const members = query
+    ? db.prepare("SELECT id, full_name, role, active, created_at FROM members WHERE full_name LIKE ? ORDER BY id DESC LIMIT ? OFFSET ?").all(pattern, limit, offset)
+    : db.prepare("SELECT id, full_name, role, active, created_at FROM members ORDER BY id DESC LIMIT ? OFFSET ?").all(limit, offset);
+  const total = query
+    ? db.prepare("SELECT COUNT(*) AS n FROM members WHERE full_name LIKE ?").get(pattern).n
+    : db.prepare("SELECT COUNT(*) AS n FROM members").get().n;
   res.json({ members, total, nextOffset: offset + members.length < total ? offset + members.length : null });
 });
 
