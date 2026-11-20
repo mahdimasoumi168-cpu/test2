@@ -239,7 +239,7 @@ function request(){
   if(!room||!isSocketOpen()||holding)return;
   holding=true;talkGeneration++;
   sendSocket("ptt:request");
-  heartbeat=setInterval(()=>{if(holding&&isSocketOpen())sendSocket("ptt:heartbeat");},8000);
+  heartbeat=setInterval(()=>{if(holding&&isSocketOpen())sendSocket("ptt:heartbeat");},10000);
 }
 function releaseTalk(){
   if(!holding)return;
