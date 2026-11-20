@@ -371,9 +371,14 @@ async function handleApi(request, env) {
     } catch (error) { return json({ error: error.message }, 400); }
   }
 
-  if (path === "/api/logout" && request.method === "POST") return json({ ok: true });
-
   const user = await authenticate(request, env);
+  if (path === "/api/logout" && request.method === "POST") {
+    if (user) {
+      await env.DB.prepare("UPDATE users SET session_version = session_version + 1, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").bind(user.id).run();
+      await audit(env, user.id, "logout");
+    }
+    return json({ ok: true });
+  }
   if (!user) return json({ error: "نشست معتبر نیست؛ دوباره وارد شوید." }, 401);
 
   if (path === "/api/me" && request.method === "GET") return json({ member: user });
