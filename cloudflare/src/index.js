@@ -1,4 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
+import { STATIC_ASSETS } from "./embedded-assets.js";
 
 const SESSION_SECONDS = 12 * 60 * 60;
 const PTT_LEASE_MS = 30000;
@@ -990,6 +991,21 @@ export default {
       if (request.method === "OPTIONS") return corsResponse(request, env, new Response(null, { status: 204 }));
       const response = await handleApi(request, env);
       if (response) return request.headers.get("upgrade")?.toLowerCase() === "websocket" ? response : corsResponse(request, env, response);
+      const url = new URL(request.url);
+      const assetPath = url.pathname === "/" ? "/index.html" : url.pathname;
+      const embedded = STATIC_ASSETS[assetPath];
+      if (embedded && (request.method === "GET" || request.method === "HEAD")) {
+        const headers = new Headers({
+          "content-type": embedded.contentType,
+          "cache-control": assetPath === "/index.html" || assetPath === "/sw.js" ? "no-cache" : "public, max-age=300"
+        });
+        headers.set("content-security-policy", "default-src 'self'; script-src 'self'; connect-src 'self' wss: stun: turn: turns:; media-src 'self' blob:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; upgrade-insecure-requests");
+        headers.set("x-content-type-options", "nosniff");
+        headers.set("referrer-policy", "strict-origin-when-cross-origin");
+        headers.set("permissions-policy", "microphone=(self), camera=()");
+        headers.set("strict-transport-security", "max-age=31536000");
+        return new Response(request.method === "HEAD" ? null : embedded.content, { status: 200, headers });
+      }
       const asset = await env.ASSETS.fetch(request);
       const headers = new Headers(asset.headers);
       headers.set("content-security-policy", "default-src 'self'; script-src 'self'; connect-src 'self' wss: stun: turn: turns:; media-src 'self' blob:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; upgrade-insecure-requests");
