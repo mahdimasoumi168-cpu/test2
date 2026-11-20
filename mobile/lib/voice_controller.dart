@@ -24,6 +24,8 @@ class VoiceFailure implements Exception {
 
 class VoiceController extends ChangeNotifier {
   VoiceController(this.audioHandler) {
+    audioHandler.onPauseAudio = pauseAudio;
+    audioHandler.onResumeAudio = resumeAudio;
     audioHandler.onStopRoom = disconnectRoom;
   }
 
@@ -54,6 +56,8 @@ class VoiceController extends ChangeNotifier {
   RTCPeerConnection? _subscriberPc;
   String? _subscriberSessionId;
   String? _activePublisherId;
+  MediaStreamTrack? _remoteAudioTrack;
+  bool _playbackPaused = false;
   String? _pendingPublisherSessionId;
   String? _pendingSpeakerId;
   int _subscriberGeneration = 0;
@@ -265,6 +269,16 @@ class VoiceController extends ChangeNotifier {
     }
   }
 
+  Future<void> pauseAudio() async {
+    _playbackPaused = true;
+    if (_remoteAudioTrack != null) _remoteAudioTrack!.enabled = false;
+  }
+
+  Future<void> resumeAudio() async {
+    _playbackPaused = false;
+    if (_remoteAudioTrack != null) _remoteAudioTrack!.enabled = true;
+  }
+
   Future<void> _loadIceServers() async {
     try {
       _iceData = await _request('/api/ice-servers');
@@ -433,7 +447,10 @@ class VoiceController extends ChangeNotifier {
       });
       if (!_isCurrentSubscriber(generation, speakerId)) throw VoiceFailure('دریافت صدا لغو شد.');
       pc.onTrack = (event) {
-        if (event.track.kind == 'audio') event.track.enabled = true;
+        if (event.track.kind == 'audio') {
+          _remoteAudioTrack = event.track;
+          event.track.enabled = !_playbackPaused;
+        }
       };
       final created = await _request(
         '/api/sfu/sessions',
@@ -541,6 +558,7 @@ class VoiceController extends ChangeNotifier {
     _subscriberPc = null;
     _subscriberSessionId = null;
     _activePublisherId = null;
+    _remoteAudioTrack = null;
     _pendingPublisherSessionId = null;
     _pendingSpeakerId = null;
     try { await pc?.close(); } catch (_) {}
@@ -557,6 +575,7 @@ class VoiceController extends ChangeNotifier {
     connected = false;
     connectionKey = null;
     _iceReady = false;
+    _remoteAudioTrack = null;
     status = message;
     _roomHeartbeat?.cancel();
     _roomHeartbeat = null;
