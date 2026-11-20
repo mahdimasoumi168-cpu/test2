@@ -40,9 +40,19 @@ CREATE TABLE IF NOT EXISTS members (
  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_members_active_name ON members(active, full_name);
+CREATE TABLE IF NOT EXISTS rooms (
+ id TEXT PRIMARY KEY,
+ name TEXT NOT NULL UNIQUE,
+ active INTEGER NOT NULL DEFAULT 1,
+ created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 `);
+const seedRooms = db.prepare("INSERT OR IGNORE INTO rooms (id, name) VALUES (?, ?)");
+for (const [id, name] of [
+  ["management", "مدیریت"], ["khademin", "خادمین"], ["nazm", "نظم"],
+  ["sound", "صوت"], ["tadarokat", "تدارکات"], ["paziraei", "پذیرایی"]
+]) seedRooms.run(id, name);
 
-const ALLOWED_ROOMS = new Set(["management", "khademin", "nazm", "sound", "tadarokat", "paziraei"]);
 const PTT_LEASE_MS = 20000;
 const roomHolders = new Map();
 
@@ -121,6 +131,45 @@ app.post("/api/admin/members", requireMember, requireAdmin, (req, res) => {
   res.status(201).json({ ok: true, id: result.lastInsertRowid });
 });
 
+app.get("/api/admin/rooms", requireMember, requireAdmin, (_req, res) => {
+  res.set("Cache-Control", "no-store");
+  const rooms = db.prepare("SELECT id, name, active, created_at FROM rooms ORDER BY CASE WHEN id = 'management' THEN 0 ELSE 1 END, name COLLATE NOCASE").all();
+  res.json({ rooms });
+});
+
+app.post("/api/admin/rooms", requireMember, requireAdmin, (req, res) => {
+  const name = typeof req.body?.name === "string" ? req.body.name.trim().normalize("NFC") : "";
+  if (!name || name.length > 60) return res.status(400).json({ error: "نام اتاق باید بین ۱ تا ۶۰ نویسه باشد." });
+  try {
+    const id = "room_" + crypto.randomBytes(6).toString("hex");
+    db.prepare("INSERT INTO rooms (id, name) VALUES (?, ?)").run(id, name);
+    return res.status(201).json({ ok: true, room: { id, name, active: 1 } });
+  } catch (error) {
+    if (String(error.code || "").includes("SQLITE_CONSTRAINT")) {
+      return res.status(409).json({ error: "اتاقی با این نام از قبل وجود دارد." });
+    }
+    throw error;
+  }
+});
+
+app.patch("/api/admin/rooms/:id/active", requireMember, requireAdmin, (req, res) => {
+  const id = req.params.id;
+  const { active } = req.body || {};
+  if (!/^([a-z0-9_-]){1,80}$/.test(id) || typeof active !== "boolean") {
+    return res.status(400).json({ error: "شناسه یا وضعیت اتاق معتبر نیست." });
+  }
+  if (id === "management" && !active) return res.status(400).json({ error: "اتاق مدیریت قابل غیرفعال‌سازی نیست." });
+  const room = db.prepare("SELECT id FROM rooms WHERE id = ?").get(id);
+  if (!room) return res.status(404).json({ error: "اتاق پیدا نشد." });
+  db.prepare("UPDATE rooms SET active = ? WHERE id = ?").run(active ? 1 : 0, id);
+  if (!active) {
+    releaseHolder(id);
+    io.in(id).emit("room:disabled");
+    io.in(id).socketsLeave(id);
+  }
+  res.json({ ok: true });
+});
+
 app.patch("/api/admin/members/:id/active", requireMember, requireAdmin, (req, res) => {
   const id = Number(req.params.id);
   const { active } = req.body || {};
@@ -192,7 +241,7 @@ io.on("connection", socket => {
 
   socket.on("room:join", (payload = {}, ack) => {
     const roomId = payload.roomId;
-    if (typeof roomId !== "string" || !ALLOWED_ROOMS.has(roomId)) {
+    if (typeof roomId !== "string" || !db.prepare("SELECT 1 FROM rooms WHERE id = ? AND active = 1").get(roomId)) {
       if (typeof ack === "function") ack({ ok: false, error: "اتاق معتبر نیست." });
       return;
     }
