@@ -46,8 +46,10 @@ function waitConnected(pc,timeoutMs=18000){
     pc.addEventListener("connectionstatechange",check);check();
   });
 }
-function makePeerConnection(){
-  return new RTCPeerConnection({iceServers:[{urls:"stun:stun.cloudflare.com:3478"}]});
+async function makePeerConnection(){
+  let iceServers=[{urls:"stun:stun.cloudflare.com:3478"}];
+  try{const data=await api("/api/ice-servers");if(Array.isArray(data.iceServers)&&data.iceServers.length)iceServers=data.iceServers;}catch{}
+  return new RTCPeerConnection({iceServers});
 }
 async function closeSession(sessionId){
   if(!sessionId||!token)return;
@@ -78,7 +80,7 @@ async function startPublisher(){
     if(!window.HamyarAudio?.createProcessedMicrophone)throw new Error("پردازش میکروفون بارگذاری نشده است.");
     microphone=await HamyarAudio.createProcessedMicrophone();
     if(!currentTalk(generation))throw new Error("لغو شد");
-    pc=makePeerConnection();
+    pc=await makePeerConnection();
     const transceiver=pc.addTransceiver(microphone.track,{direction:"sendonly"});
     const sender=transceiver.sender;
     try{
