@@ -357,17 +357,36 @@ async function handleApi(request, env) {
 
   if (path === "/api/admin/bootstrap" && request.method === "POST") {
     if (!env.BOOTSTRAP_ADMIN_KEY || !env.SESSION_SECRET || !env.CODE_PEPPER) return json({ error: "راه‌اندازی اولیه پیکربندی نشده است." }, 503);
+    const ip = request.headers.get("cf-connecting-ip") || "unknown";
+    const ipHash = b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(ip))));
+    const allowed = await env.GLOBAL_PRESENCE.getByName("global").allowLogin(ipHash, "bootstrap");
+    if (!allowed) return json({ error: "تعداد تلاش‌های راه‌اندازی زیاد است؛ ۱۵ دقیقه دیگر دوباره امتحان کنید." }, 429);
     const supplied = request.headers.get("x-bootstrap-key") || "";
-    if (!constantTimeEqual(encoder.encode(supplied), encoder.encode(env.BOOTSTRAP_ADMIN_KEY))) return json({ error: "کلید راه‌اندازی معتبر نیست." }, 403);
-    const count = await env.DB.prepare("SELECT COUNT(*) AS total FROM users").first();
-    if (Number(count?.total || 0) !== 0) return json({ error: "مدیر اولیه قبلاً ایجاد شده است." }, 409);
+    if (supplied.length > 256 || !constantTimeEqual(encoder.encode(supplied), encoder.encode(env.BOOTSTRAP_ADMIN_KEY))) {
+      return json({ error: "کلید راه‌اندازی معتبر نیست." }, 403);
+    }
     let body;
     try { body = await request.json(); } catch { return json({ error: "اطلاعات مدیر معتبر نیست." }, 400); }
     try {
-      const admin = await createMember(env, body, "admin");
-      const user = { id: admin.id, display_name: admin.name, role: "admin", session_version: 0 };
+      const fullName = typeof body.fullName === "string" ? body.fullName.trim().normalize("NFC") : "";
+      const guardianCode = typeof body.guardianCode === "string" ? body.guardianCode.trim() : "";
+      const personCode = typeof body.personCode === "string" ? body.personCode.trim() : "";
+      if (!fullName || fullName.length > 120 || guardianCode.length < 4 || guardianCode.length > 120 ||
+          personCode.length < 4 || personCode.length > 120) {
+        return json({ error: "نام و هر دو کد باید معتبر باشند؛ طول هر کد حداقل ۴ نویسه است." }, 400);
+      }
+      const id = crypto.randomUUID();
+      const guardianHash = await hashCode(guardianCode, env.CODE_PEPPER);
+      const personHash = await hashCode(personCode, env.CODE_PEPPER);
+      const inserted = await env.DB.prepare(
+        "INSERT INTO users (id, display_name, login_code_hash, guardian_code_hash, person_code_hash, role, is_active, session_version) SELECT ?, ?, ?, ?, ?, 'admin', 1, 0 WHERE NOT EXISTS (SELECT 1 FROM users) RETURNING id"
+      ).bind(id, fullName, guardianHash, guardianHash, personHash).first();
+      if (!inserted) return json({ error: "مدیر اولیه قبلاً ایجاد شده است." }, 409);
+      await env.DB.prepare("INSERT OR IGNORE INTO room_members (room_id, user_id) VALUES ('management', ?)").bind(id).run();
+      const admin = { id, name: fullName, role: "admin" };
+      const user = { id, display_name: fullName, role: "admin", session_version: 0 };
       const token = await issueSession(user, env);
-      await audit(env, admin.id, "admin.bootstrap");
+      await audit(env, id, "admin.bootstrap");
       return json({ ok: true, token, member: admin }, 201);
     } catch (error) { return json({ error: error.message }, 400); }
   }
