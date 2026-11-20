@@ -776,8 +776,11 @@ export class RoomHub extends DurableObject {
       "SELECT id FROM sfu_sessions WHERE id = ? AND user_id = ? AND room_id = ? AND session_type = 'publisher' AND status = 'published'"
     ).bind(sessionId, userId, roomId).first();
     if (!session) return false;
-    this.ctx.storage.sql.exec("UPDATE speaker SET session_id = ? WHERE id = 1 AND user_id = ? AND connection_key = ?", sessionId, userId, connectionKey);
-    return true;
+    const attached = this.ctx.storage.sql.exec(
+      "UPDATE speaker SET session_id = ? WHERE id = 1 AND user_id = ? AND connection_key = ? AND expires_at > ? RETURNING session_id",
+      sessionId, userId, connectionKey, Date.now()
+    ).toArray()[0];
+    return Boolean(attached);
   }
 
   async announcePublisher(userId, sessionId, connectionKey) {
@@ -788,7 +791,9 @@ export class RoomHub extends DurableObject {
       "SELECT id FROM sfu_sessions WHERE id = ? AND user_id = ? AND room_id = ? AND session_type = 'publisher' AND status = 'published'"
     ).bind(sessionId, userId, roomId).first();
     if (!session) return false;
-    this.broadcast({ type: "ptt:published", memberId: userId, memberName: current.displayName, sessionId });
+    const latest = await this.getSpeaker();
+    if (!latest || latest.userId !== userId || latest.connectionKey !== connectionKey || latest.sessionId !== sessionId) return false;
+    this.broadcast({ type: "ptt:published", memberId: userId, memberName: latest.displayName, sessionId });
     return true;
   }
 
