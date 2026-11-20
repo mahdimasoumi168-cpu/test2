@@ -10,7 +10,9 @@ const files = [
   ["audio-processing.js", "application/javascript; charset=utf-8"],
   ["manifest.webmanifest", "application/manifest+json; charset=utf-8"],
   ["styles.css", "text/css; charset=utf-8"],
-  ["sw.js", "application/javascript; charset=utf-8"]
+  ["sw.js", "application/javascript; charset=utf-8"],
+  ["setup.html", "text/html; charset=utf-8"],
+  ["setup.js", "application/javascript; charset=utf-8"]
 ];
 
 const assets = {};
