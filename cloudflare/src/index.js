@@ -151,6 +151,7 @@ async function handleApi(request, env) {
     return json({ ok: true, service: "hamyar-heyat-cloudflare", voice: "not-connected-yet" });
   }
 
+  if (!path.startsWith("/api/")) return null;
   if (!sameOrigin(request)) return json({ error: "درخواست از مبدأ مجاز نیست." }, 403);
 
   if (path === "/api/admin/bootstrap" && request.method === "POST") {
@@ -361,7 +362,7 @@ export class RoomHub extends DurableObject {
   async webSocketClose(socket) {
     const attachment = socket.deserializeAttachment();
     if (attachment?.userId) await this.releaseSpeaker(attachment.userId);
-    this.broadcast({ type: "room:presence", connected: Math.max(0, this.ctx.getWebSockets().length - 1) });
+    this.broadcast({ type: "room:presence", connected: this.ctx.getWebSockets().length });
   }
 
   async webSocketError(socket) {
