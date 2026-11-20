@@ -7,7 +7,16 @@
     "directory": "./public",
     "binding": "ASSETS",
     "run_worker_first": [
-      "/api/*"
+      "/api/*",
+      "/",
+      "/index.html",
+      "/app.js",
+      "/audio-processing.js",
+      "/manifest.webmanifest",
+      "/styles.css",
+      "/sw.js",
+      "/setup.html",
+      "/setup.js"
     ]
   },
   "d1_databases": [
@@ -54,10 +63,7 @@
   "previews": {
     "vars": {
       "ENVIRONMENT": "preview",
-      "SESSION_SECRET": "preview-only-session-secret-not-for-production-2026",
-      "BOOTSTRAP_ADMIN_KEY": "preview-only-bootstrap-key-not-for-production",
-      "CODE_PEPPER": "preview-only-code-pepper-not-for-production-2026",
-      "ALLOWED_ORIGINS": "capacitor://localhost,http://localhost"
+      "ALLOWED_ORIGINS": "https://test2.mahdi-masoumi168.workers.dev,capacitor://localhost,http://localhost"
     },
     "d1_databases": [
       {
@@ -80,7 +86,8 @@
     }
   },
   "vars": {
-    "ALLOWED_ORIGINS": "capacitor://localhost,http://localhost",
-    "TURN_KEY_ID": "649dc037db48650d26c1b96a882bd040"
+    "ALLOWED_ORIGINS": "https://test2.mahdi-masoumi168.workers.dev,capacitor://localhost,http://localhost",
+    "TURN_KEY_ID": "085cba327a89cb2e33fd2daefda1b19a",
+    "ENVIRONMENT": "production"
   }
 }

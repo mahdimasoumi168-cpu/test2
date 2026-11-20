@@ -8,9 +8,12 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "member:add": "node scripts/add-member.js",
-    "test": "node scripts/check-client.js && node --test",
+    "test": "npm run test:node && npm run test:worker",
     "worker:deploy": "wrangler deploy --config wrangler.jsonc",
-    "worker:preview": "wrangler preview --config wrangler.jsonc"
+    "worker:preview": "wrangler preview --config wrangler.jsonc",
+    "test:node": "node scripts/check-client.js && node --test tests/server.test.js",
+    "test:worker": "vitest run --config vitest.config.mjs",
+    "assets:embed": "node scripts/embed-assets.js"
   },
   "engines": {
     "node": ">=22.12.0"
@@ -26,6 +29,8 @@
   },
   "devDependencies": {
     "socket.io-client": "^4.8.1",
-    "wrangler": "^4.165.0"
+    "wrangler": "^4.165.0",
+    "@cloudflare/vitest-plugin": "^1.0.0",
+    "vitest": "^4.1.0"
   }
 }

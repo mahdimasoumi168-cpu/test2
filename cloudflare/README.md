@@ -32,6 +32,12 @@ node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 
 Use a new output for each secret. Save the one-time `BOOTSTRAP_ADMIN_KEY` securely because it cannot be read back from Cloudflare.
 
+## D1 schema provisioning
+
+The production and staging D1 databases already contain schema versions 1–3. The canonical final schema for a **new, empty** D1 database is `cloudflare/schema.sql`. Apply it once to an empty database using the Cloudflare D1 console or D1 query API. Do not run it against the existing production/staging databases, and do not re-run historical migration files 0002/0003 against a database where those columns already exist.
+
+The Worker expects the tables `users`, `rooms`, `room_members`, `security_events`, `sfu_sessions`, and `schema_migrations`. Keep schema changes versioned and test them against a disposable database before applying to production.
+
 ## Deploy and preview
 
 The Cloudflare build trigger for the repository deploys the Worker from the default branch. For a local deployment after configuring secrets:
@@ -63,14 +69,18 @@ Use your own administrator name and codes. The endpoint refuses to create anothe
 
 - One active speaker per room, with exclusive Push-to-Talk control.
 - A global Durable Object caps all active room connections at 100 across the whole service.
-- Room presence has expiring leases; clients refresh the lease every four minutes.
+- Room membership is deny-by-default for regular members. Administrators assign each member to active rooms from the Persian admin panel; the Worker checks membership on every WebSocket and SFU API request.
+- PTT speaker leases are stored atomically in each room Durable Object, bound to the exact WebSocket connection, and released on button release, socket close, or lease expiry. A second device logged into the same account cannot release or renew another device's speaker lease.
+- Login attempts are limited per IP and per account identity; the account identity limit is 10 attempts per 15-minute bucket.
 - Cloudflare Realtime SFU handles publication and subscription. Audio is constrained to a target maximum of 20 kbps per sender to control free egress consumption.
-- TURN credentials are generated for authenticated members with a 48-hour TTL (Cloudflare's maximum).
+- TURN credentials are generated for authenticated members with a 48-hour TTL (Cloudflare's maximum), but the Worker must have the `TURN_KEY_SECRET` secret configured. Without it, clients use STUN only and some restrictive networks may fail to connect.
 - PWA foreground audio is implemented in the branch; background playback while iOS/Android suspends the web page is not guaranteed.
 
 ## Zero-cost constraints
 
-No paid Cloudflare plan or paid third-party service is configured in this repository. Free-tier limits still apply and are not a capacity guarantee. At 100 users, actual media egress, Workers requests, Durable Objects requests, CPU time, and mobile network behavior must be load-tested. If the free quota is exceeded, service may be throttled or stop until reset; do not enable paid overages.
+No paid third-party conferencing service is configured. Cloudflare Realtime includes 1,000 GB/month shared SFU+TURN egress; usage above that is currently billed at $0.05/GB. Do not assume Cloudflare will automatically stop the service at the free limit. Monitor account-wide Realtime usage and configure billing/usage controls before production. The estimate and suggested 700–800 GB operating guardrail are documented in `docs/CAPACITY_AND_COST.md`.
+
+Workers, Durable Objects, and D1 have separate Free-plan quotas and limits. At 100 users, actual media egress, Worker requests, Durable Object requests, CPU time, and mobile network behavior must be load-tested. This repository does not yet implement an authoritative account-wide billing cutoff; zero-cost operation is not guaranteed until usage monitoring and account billing controls are configured.
 
 ## Release gate
 

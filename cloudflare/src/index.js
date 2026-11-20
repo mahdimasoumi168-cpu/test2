@@ -1,4 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
+import { STATIC_ASSETS } from "./embedded-assets.js";
 
 const SESSION_SECONDS = 12 * 60 * 60;
 const PTT_LEASE_MS = 30000;
@@ -144,11 +145,8 @@ async function createMember(env, body, role = "member") {
   await env.DB.prepare(
     "INSERT INTO users (id, display_name, login_code_hash, guardian_code_hash, person_code_hash, role, is_active, session_version) VALUES (?, ?, ?, ?, ?, ?, 1, 0)"
   ).bind(id, fullName, guardianHash, guardianHash, personHash, role).run();
-  const rooms = await env.DB.prepare("SELECT id FROM rooms WHERE is_active = 1").all();
-  for (const room of rooms.results || []) {
-    if (role === "admin" || room.id !== "management") {
-      await env.DB.prepare("INSERT OR IGNORE INTO room_members (room_id, user_id) VALUES (?, ?)").bind(room.id, id).run();
-    }
+  if (role === "admin") {
+    await env.DB.prepare("INSERT OR IGNORE INTO room_members (room_id, user_id) VALUES ('management', ?)").bind(id).run();
   }
   return { id, name: fullName, role };
 }
@@ -200,7 +198,8 @@ async function handleSfu(request, env, user, url) {
     if (!room) return json({ error: "دسترسی به این اتاق مجاز نیست." }, 403);
     const hub = env.ROOM_HUB.getByName(roomId);
     const speaker = await hub.getSpeaker();
-    if (type === "publisher" && (!speaker || speaker.userId !== user.id)) return json({ error: "برای انتشار صدا باید نوبت صحبت در اختیار شما باشد." }, 403);
+    const connectionKey = typeof body.connectionKey === "string" ? body.connectionKey : "";
+    if (type === "publisher" && (!connectionKey || !speaker || speaker.userId !== user.id || speaker.connectionKey !== connectionKey)) return json({ error: "برای انتشار صدا باید نوبت صحبت فعال در همین اتصال را داشته باشید." }, 403);
     if (type === "subscriber" && (!speaker || !speaker.sessionId)) return json({ error: "در حال حاضر گوینده فعالی وجود ندارد." }, 409);
     try {
       const created = await sfuRequest(env, "/sessions/new", "POST");
@@ -220,16 +219,17 @@ async function handleSfu(request, env, user, url) {
     const session = await env.DB.prepare("SELECT * FROM sfu_sessions WHERE id = ? AND user_id = ? AND session_type = 'publisher' AND status = 'created'")
       .bind(sessionId, user.id).first();
     if (!session) return json({ error: "نشست انتشار معتبر نیست." }, 404);
-    const hub = env.ROOM_HUB.getByName(session.room_id);
-    const speaker = await hub.getSpeaker();
-    if (!speaker || speaker.userId !== user.id) return json({ error: "مجوز صحبت منقضی شده است." }, 409);
     let body;
     try { body = await request.json(); } catch { return json({ error: "توضیحات اتصال معتبر نیست." }, 400); }
     if (!body.sessionDescription || body.sessionDescription.type !== "offer" ||
         typeof body.sessionDescription.sdp !== "string" || body.sessionDescription.sdp.length > 50000 ||
-        typeof body.mid !== "string" || body.mid.length > 12) {
+        typeof body.mid !== "string" || body.mid.length > 12 ||
+        typeof body.connectionKey !== "string" || body.connectionKey.length > 80) {
       return json({ error: "پیشنهاد WebRTC یا شناسه ترک معتبر نیست." }, 400);
     }
+    const hub = env.ROOM_HUB.getByName(session.room_id);
+    const speaker = await hub.getSpeaker();
+    if (!speaker || speaker.userId !== user.id || speaker.connectionKey !== body.connectionKey) return json({ error: "مجوز صحبت منقضی شده یا به این اتصال تعلق ندارد." }, 409);
     try {
       const result = await sfuRequest(env, "/sessions/" + encodeURIComponent(sessionId) + "/tracks/new", "POST", {
         sessionDescription: body.sessionDescription,
@@ -238,7 +238,7 @@ async function handleSfu(request, env, user, url) {
       if (result.tracks?.some(track => track.errorCode || track.errorDescription)) throw new Error("SFU ترک صوتی را نپذیرفت.");
       await env.DB.prepare("UPDATE sfu_sessions SET status = 'published', mid = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?")
         .bind(body.mid, sessionId).run();
-      const attached = await hub.attachPublisher(user.id, sessionId);
+      const attached = await hub.attachPublisher(user.id, sessionId, body.connectionKey);
       if (!attached) {
         await closeSfuSession(env, sessionId, body.mid);
         return json({ error: "مجوز صحبت پیش از آماده‌شدن صدا منقضی شد." }, 409);
@@ -319,7 +319,20 @@ async function handleApi(request, env) {
   if (!allowedOrigin(request, env)) return json({ error: "مبدأ درخواست معتبر نیست." }, 403);
 
   if (path === "/api/health" && request.method === "GET") {
-    return json({ ok: true, service: "hamyar-heyat-cloudflare", voice: sfuConfigured(env) ? "configured" : "not-configured" });
+    try {
+      const rooms = await env.DB.prepare("SELECT COUNT(*) AS total FROM rooms WHERE is_active = 1").first();
+      const voiceReady = sfuConfigured(env);
+      return json({
+        ok: voiceReady,
+        service: "hamyar-heyat-cloudflare",
+        database: "ready",
+        activeRooms: Number(rooms?.total || 0),
+        voice: voiceReady ? "configured" : "not-configured",
+        turn: env.TURN_KEY_ID && env.TURN_KEY_SECRET ? "configured" : "stun-only"
+      }, voiceReady ? 200 : 503);
+    } catch {
+      return json({ ok: false, service: "hamyar-heyat-cloudflare", database: "unavailable" }, 503);
+    }
   }
 
   if (path === "/api/login" && request.method === "POST") {
@@ -328,14 +341,15 @@ async function handleApi(request, env) {
     try { body = await request.json(); } catch { return json({ error: "درخواست ورود معتبر نیست." }, 400); }
     const ip = request.headers.get("cf-connecting-ip") || "unknown";
     const ipHash = b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(ip))));
-    const loginAllowed = await env.GLOBAL_PRESENCE.getByName("global").allowLogin(ipHash);
-    if (!loginAllowed) return json({ error: "تعداد تلاش‌های ورود زیاد است؛ ۱۵ دقیقه دیگر دوباره امتحان کنید." }, 429);
     const fullName = typeof body.fullName === "string" ? body.fullName.trim().normalize("NFC") : "";
     const guardianCode = typeof body.guardianCode === "string" ? body.guardianCode.trim() : "";
     const personCode = typeof body.personCode === "string" ? body.personCode.trim() : "";
     if (!fullName || !guardianCode || !personCode || fullName.length > 120 || guardianCode.length > 120 || personCode.length > 120) {
       return json({ error: "همه اطلاعات ورود را کامل وارد کنید." }, 400);
     }
+    const nameHash = b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(fullName))));
+    const loginAllowed = await env.GLOBAL_PRESENCE.getByName("global").allowLogin(ipHash, nameHash);
+    if (!loginAllowed) return json({ error: "تعداد تلاش‌های ورود برای این حساب زیاد است؛ ۱۵ دقیقه دیگر دوباره امتحان کنید." }, 429);
     const candidates = await env.DB.prepare(
       "SELECT id, display_name, role, session_version, guardian_code_hash, person_code_hash FROM users WHERE display_name = ? AND is_active = 1 LIMIT 10"
     ).bind(fullName).all();
@@ -346,7 +360,7 @@ async function handleApi(request, env) {
       if (guardianOk && personOk) { user = candidate; break; }
     }
     if (!user) {
-      await audit(env, null, "login.failed", null, { nameHash: b64url(await crypto.subtle.digest("SHA-256", encoder.encode(fullName))) });
+      await audit(env, null, "login.failed", null, { nameHash });
       return json({ error: "اطلاعات ورود صحیح نیست یا عضویت فعال نیست." }, 401);
     }
     const token = await issueSession(user, env);
@@ -356,17 +370,36 @@ async function handleApi(request, env) {
 
   if (path === "/api/admin/bootstrap" && request.method === "POST") {
     if (!env.BOOTSTRAP_ADMIN_KEY || !env.SESSION_SECRET || !env.CODE_PEPPER) return json({ error: "راه‌اندازی اولیه پیکربندی نشده است." }, 503);
+    const ip = request.headers.get("cf-connecting-ip") || "unknown";
+    const ipHash = b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(ip))));
+    const allowed = await env.GLOBAL_PRESENCE.getByName("global").allowLogin(ipHash, "bootstrap");
+    if (!allowed) return json({ error: "تعداد تلاش‌های راه‌اندازی زیاد است؛ ۱۵ دقیقه دیگر دوباره امتحان کنید." }, 429);
     const supplied = request.headers.get("x-bootstrap-key") || "";
-    if (!constantTimeEqual(encoder.encode(supplied), encoder.encode(env.BOOTSTRAP_ADMIN_KEY))) return json({ error: "کلید راه‌اندازی معتبر نیست." }, 403);
-    const count = await env.DB.prepare("SELECT COUNT(*) AS total FROM users").first();
-    if (Number(count?.total || 0) !== 0) return json({ error: "مدیر اولیه قبلاً ایجاد شده است." }, 409);
+    if (supplied.length > 256 || !constantTimeEqual(encoder.encode(supplied), encoder.encode(env.BOOTSTRAP_ADMIN_KEY))) {
+      return json({ error: "کلید راه‌اندازی معتبر نیست." }, 403);
+    }
     let body;
     try { body = await request.json(); } catch { return json({ error: "اطلاعات مدیر معتبر نیست." }, 400); }
     try {
-      const admin = await createMember(env, body, "admin");
-      const user = { id: admin.id, display_name: admin.name, role: "admin", session_version: 0 };
+      const fullName = typeof body.fullName === "string" ? body.fullName.trim().normalize("NFC") : "";
+      const guardianCode = typeof body.guardianCode === "string" ? body.guardianCode.trim() : "";
+      const personCode = typeof body.personCode === "string" ? body.personCode.trim() : "";
+      if (!fullName || fullName.length > 120 || guardianCode.length < 4 || guardianCode.length > 120 ||
+          personCode.length < 4 || personCode.length > 120) {
+        return json({ error: "نام و هر دو کد باید معتبر باشند؛ طول هر کد حداقل ۴ نویسه است." }, 400);
+      }
+      const id = crypto.randomUUID();
+      const guardianHash = await hashCode(guardianCode, env.CODE_PEPPER);
+      const personHash = await hashCode(personCode, env.CODE_PEPPER);
+      const inserted = await env.DB.prepare(
+        "INSERT INTO users (id, display_name, login_code_hash, guardian_code_hash, person_code_hash, role, is_active, session_version) SELECT ?, ?, ?, ?, ?, 'admin', 1, 0 WHERE NOT EXISTS (SELECT 1 FROM users) RETURNING id"
+      ).bind(id, fullName, guardianHash, guardianHash, personHash).first();
+      if (!inserted) return json({ error: "مدیر اولیه قبلاً ایجاد شده است." }, 409);
+      await env.DB.prepare("INSERT OR IGNORE INTO room_members (room_id, user_id) VALUES ('management', ?)").bind(id).run();
+      const admin = { id, name: fullName, role: "admin" };
+      const user = { id, display_name: fullName, role: "admin", session_version: 0 };
       const token = await issueSession(user, env);
-      await audit(env, admin.id, "admin.bootstrap");
+      await audit(env, id, "admin.bootstrap");
       return json({ ok: true, token, member: admin }, 201);
     } catch (error) { return json({ error: error.message }, 400); }
   }
@@ -441,6 +474,52 @@ async function handleApi(request, env) {
       await audit(env, user.id, "member.created", member.id, { role: member.role });
       return json({ ok: true, id: member.id }, 201);
     } catch (error) { return json({ error: error.message }, 400); }
+  }
+
+  const memberRoomsMatch = path.match(/^\/api\/admin\/members\/([^/]+)\/rooms$/);
+  if (memberRoomsMatch && (request.method === "GET" || request.method === "PUT")) {
+    if (user.role !== "admin") return json({ error: "دسترسی مدیر لازم است." }, 403);
+    const memberId = decodeURIComponent(memberRoomsMatch[1]);
+    const target = await env.DB.prepare("SELECT id, role FROM users WHERE id = ?").bind(memberId).first();
+    if (!target) return json({ error: "عضو پیدا نشد." }, 404);
+    if (target.role === "admin") return json({ error: "مدیر به همه اتاق‌ها دسترسی دارد و نیازی به تخصیص جداگانه ندارد." }, 409);
+
+    if (request.method === "GET") {
+      const rooms = await env.DB.prepare("SELECT id, name FROM rooms WHERE is_active = 1 AND id <> 'management' ORDER BY name").all();
+      const assigned = await env.DB.prepare("SELECT room_id FROM room_members WHERE user_id = ?").bind(memberId).all();
+      return json({
+        rooms: rooms.results || [],
+        assignedRoomIds: (assigned.results || []).map(row => row.room_id)
+      });
+    }
+
+    let body;
+    try { body = await request.json(); } catch { return json({ error: "فهرست اتاق‌ها معتبر نیست." }, 400); }
+    if (!Array.isArray(body.roomIds) || body.roomIds.length > 50 ||
+        body.roomIds.some(id => typeof id !== "string" || !validRoomId(id)) ||
+        new Set(body.roomIds).size !== body.roomIds.length ||
+        body.roomIds.includes("management")) {
+      return json({ error: "فهرست اتاق‌های انتخاب‌شده معتبر نیست." }, 400);
+    }
+    const requested = new Set(body.roomIds);
+    const allowedRooms = await env.DB.prepare("SELECT id FROM rooms WHERE is_active = 1 AND id <> 'management'").all();
+    const allowedIds = new Set((allowedRooms.results || []).map(row => row.id));
+    if ([...requested].some(id => !allowedIds.has(id))) return json({ error: "یک یا چند اتاق انتخاب‌شده وجود ندارد یا غیرفعال است." }, 400);
+
+    const previous = await env.DB.prepare("SELECT room_id FROM room_members WHERE user_id = ?").bind(memberId).all();
+    const previousIds = (previous.results || []).map(row => row.room_id);
+    const statements = [
+      env.DB.prepare("DELETE FROM room_members WHERE user_id = ?").bind(memberId),
+      ...[...requested].map(roomId =>
+        env.DB.prepare("INSERT INTO room_members (room_id, user_id) VALUES (?, ?)").bind(roomId, memberId)
+      )
+    ];
+    await env.DB.batch(statements);
+    for (const roomId of previousIds) {
+      if (!requested.has(roomId)) await env.ROOM_HUB.getByName(roomId).revokeUser(memberId);
+    }
+    await audit(env, user.id, "member.rooms.updated", memberId, { roomIds: [...requested] });
+    return json({ ok: true, roomIds: [...requested] });
   }
 
   const memberPatch = path.match(/^\/api\/admin\/members\/([^/]+)$/);
@@ -619,15 +698,48 @@ export class RoomHub extends DurableObject {
         user_id TEXT NOT NULL,
         display_name TEXT NOT NULL,
         session_id TEXT,
+        connection_key TEXT NOT NULL,
         expires_at INTEGER NOT NULL
       )
     `);
   }
 
   async getSpeaker() {
-    const row = this.ctx.storage.sql.exec("SELECT user_id, display_name, session_id, expires_at FROM speaker WHERE id = 1").toArray()[0];
+    const row = this.ctx.storage.sql.exec("SELECT user_id, display_name, session_id, connection_key, expires_at FROM speaker WHERE id = 1").toArray()[0];
     if (!row || row.expires_at <= Date.now()) return null;
-    return { userId: row.user_id, displayName: row.display_name, sessionId: row.session_id, expiresAt: row.expires_at };
+    return { userId: row.user_id, displayName: row.display_name, sessionId: row.session_id, connectionKey: row.connection_key, expiresAt: row.expires_at };
+  }
+
+  async acquireSpeaker(userId, displayName, connectionKey) {
+    if (!userId || !displayName || !connectionKey) return { ok: false, speaker: await this.getSpeaker() };
+    const now = Date.now();
+    const claim = this.ctx.storage.sql.exec(
+      "INSERT INTO speaker (id, user_id, display_name, session_id, connection_key, expires_at) VALUES (1, ?, ?, NULL, ?, ?) ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id, display_name=excluded.display_name, session_id=CASE WHEN speaker.connection_key = excluded.connection_key THEN speaker.session_id ELSE NULL END, connection_key=excluded.connection_key, expires_at=excluded.expires_at WHERE speaker.expires_at <= ? OR speaker.connection_key = ? RETURNING user_id, display_name, session_id, connection_key, expires_at",
+      userId, displayName, connectionKey, now + PTT_LEASE_MS, now, connectionKey
+    ).toArray()[0];
+    if (!claim) return { ok: false, speaker: await this.getSpeaker() };
+    await this.ctx.storage.setAlarm(now + PTT_LEASE_MS);
+    return {
+      ok: true,
+      speaker: {
+        userId: claim.user_id,
+        displayName: claim.display_name,
+        sessionId: claim.session_id,
+        connectionKey: claim.connection_key,
+        expiresAt: claim.expires_at
+      }
+    };
+  }
+
+  async renewSpeaker(userId, connectionKey) {
+    const now = Date.now();
+    const renewed = this.ctx.storage.sql.exec(
+      "UPDATE speaker SET expires_at = ? WHERE id = 1 AND user_id = ? AND connection_key = ? AND expires_at > ? RETURNING expires_at",
+      now + PTT_LEASE_MS, userId, connectionKey, now
+    ).toArray()[0];
+    if (!renewed) return false;
+    await this.ctx.storage.setAlarm(renewed.expires_at);
+    return true;
   }
 
   getPresence() {
@@ -652,7 +764,7 @@ export class RoomHub extends DurableObject {
     const client = pair[0], server = pair[1];
     server.serializeAttachment({ userId, displayName, role, socketKey, lastRequestAt: 0, lastHeartbeatAt: 0 });
     this.ctx.acceptWebSocket(server);
-    server.send(JSON.stringify({ type: "room:ready", capacity, connected: this.ctx.getWebSockets().length }));
+    server.send(JSON.stringify({ type: "room:ready", capacity, connected: this.ctx.getWebSockets().length, connectionKey: socketKey }));
     this.broadcast({ type: "room:presence", connected: this.ctx.getWebSockets().length }, server);
     const speaker = await this.getSpeaker();
     if (speaker?.sessionId) server.send(JSON.stringify({ type: "ptt:published", memberId: speaker.userId, memberName: speaker.displayName, sessionId: speaker.sessionId }));
@@ -681,40 +793,30 @@ export class RoomHub extends DurableObject {
       if (now - (attachment.lastRequestAt || 0) < 350) return;
       attachment.lastRequestAt = now;
       socket.serializeAttachment(attachment);
-      const current = await this.getSpeaker();
-      if (current && current.userId !== attachment.userId) {
-        socket.send(JSON.stringify({ type: "ptt:busy", memberName: current.displayName }));
+      const claim = await this.acquireSpeaker(attachment.userId, attachment.displayName, attachment.socketKey);
+      if (!claim.ok) {
+        socket.send(JSON.stringify({ type: "ptt:busy", memberName: claim.speaker?.displayName || "عضو دیگر" }));
         return;
-      }
-      if (!current) {
-        this.ctx.storage.sql.exec(
-          "INSERT INTO speaker (id, user_id, display_name, session_id, expires_at) VALUES (1, ?, ?, NULL, ?) ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id, display_name=excluded.display_name, session_id=NULL, expires_at=excluded.expires_at",
-          attachment.userId, attachment.displayName, now + PTT_LEASE_MS
-        );
-        await this.ctx.storage.setAlarm(now + PTT_LEASE_MS);
       }
       this.broadcast({ type: "ptt:granted", memberId: attachment.userId, memberName: attachment.displayName, maxTalkSeconds: PTT_LEASE_MS / 1000 });
       return;
     }
 
     if (message.type === "ptt:heartbeat") {
-      const current = await this.getSpeaker();
-      if (!current || current.userId !== attachment.userId || now - (attachment.lastHeartbeatAt || 0) < PTT_HEARTBEAT_MIN_INTERVAL_MS) return;
+      if (now - (attachment.lastHeartbeatAt || 0) < PTT_HEARTBEAT_MIN_INTERVAL_MS) return;
       attachment.lastHeartbeatAt = now;
       socket.serializeAttachment(attachment);
-      const expiresAt = now + PTT_LEASE_MS;
-      this.ctx.storage.sql.exec("UPDATE speaker SET expires_at = ? WHERE id = 1 AND user_id = ?", expiresAt, attachment.userId);
-      await this.ctx.storage.setAlarm(expiresAt);
+      await this.renewSpeaker(attachment.userId, attachment.socketKey);
       return;
     }
 
     if (message.type === "ptt:release") {
-      await this.releaseSpeaker(attachment.userId);
+      await this.releaseSpeaker(attachment.userId, attachment.socketKey);
       return;
     }
 
     if (message.type === "ptt:published") {
-      const announced = await this.announcePublisher(attachment.userId, message.sessionId);
+      const announced = await this.announcePublisher(attachment.userId, message.sessionId, attachment.socketKey);
       if (!announced) socket.send(JSON.stringify({ type: "ptt:publish-rejected" }));
       return;
     }
@@ -723,41 +825,47 @@ export class RoomHub extends DurableObject {
     }
   }
 
-  async attachPublisher(userId, sessionId) {
+  async attachPublisher(userId, sessionId, connectionKey) {
     const current = await this.getSpeaker();
-    if (!current || current.userId !== userId || !sessionId) return false;
+    if (!current || current.userId !== userId || current.connectionKey !== connectionKey || !sessionId) return false;
     const roomId = await this.ctx.storage.get("roomId");
     const session = await this.env.DB.prepare(
       "SELECT id FROM sfu_sessions WHERE id = ? AND user_id = ? AND room_id = ? AND session_type = 'publisher' AND status = 'published'"
     ).bind(sessionId, userId, roomId).first();
     if (!session) return false;
-    this.ctx.storage.sql.exec("UPDATE speaker SET session_id = ? WHERE id = 1 AND user_id = ?", sessionId, userId);
-    return true;
+    const attached = this.ctx.storage.sql.exec(
+      "UPDATE speaker SET session_id = ? WHERE id = 1 AND user_id = ? AND connection_key = ? AND expires_at > ? RETURNING session_id",
+      sessionId, userId, connectionKey, Date.now()
+    ).toArray()[0];
+    return Boolean(attached);
   }
 
-  async announcePublisher(userId, sessionId) {
+  async announcePublisher(userId, sessionId, connectionKey) {
     const current = await this.getSpeaker();
-    if (!current || current.userId !== userId || current.sessionId !== sessionId) return false;
+    if (!current || current.userId !== userId || current.connectionKey !== connectionKey || current.sessionId !== sessionId) return false;
     const roomId = await this.ctx.storage.get("roomId");
     const session = await this.env.DB.prepare(
       "SELECT id FROM sfu_sessions WHERE id = ? AND user_id = ? AND room_id = ? AND session_type = 'publisher' AND status = 'published'"
     ).bind(sessionId, userId, roomId).first();
     if (!session) return false;
-    this.broadcast({ type: "ptt:published", memberId: userId, memberName: current.displayName, sessionId });
+    const latest = await this.getSpeaker();
+    if (!latest || latest.userId !== userId || latest.connectionKey !== connectionKey || latest.sessionId !== sessionId) return false;
+    this.broadcast({ type: "ptt:published", memberId: userId, memberName: latest.displayName, sessionId });
     return true;
   }
 
-  async releaseSpeaker(userId = null) {
-    const current = this.ctx.storage.sql.exec("SELECT user_id, session_id FROM speaker WHERE id = 1").toArray()[0];
-    if (!current || (userId && current.user_id !== userId)) return;
+  async releaseSpeaker(userId = null, connectionKey = null) {
+    const current = this.ctx.storage.sql.exec("SELECT user_id, session_id, connection_key FROM speaker WHERE id = 1").toArray()[0];
+    if (!current || (userId && current.user_id !== userId) || (connectionKey && current.connection_key !== connectionKey)) return;
     this.ctx.storage.sql.exec("DELETE FROM speaker WHERE id = 1");
     await this.ctx.storage.deleteAlarm();
     this.broadcast({ type: "ptt:released", memberId: current.user_id, sessionId: current.session_id || null });
-    const roomId = await this.ctx.storage.get("roomId");
-    const sessions = await this.env.DB.prepare(
-      "SELECT id, mid FROM sfu_sessions WHERE user_id = ? AND room_id = ? AND session_type = 'publisher' AND status <> 'closed'"
-    ).bind(current.user_id, roomId).all().catch(() => ({ results: [] }));
-    for (const session of sessions.results || []) await closeSfuSession(this.env, session.id, session.mid);
+    if (current.session_id) {
+      const session = await this.env.DB.prepare(
+        "SELECT id, mid FROM sfu_sessions WHERE id = ? AND user_id = ? AND session_type = 'publisher' AND status <> 'closed'"
+      ).bind(current.session_id, current.user_id).first().catch(() => null);
+      if (session) await closeSfuSession(this.env, session.id, session.mid);
+    }
   }
 
   async revokeUser(userId) {
@@ -795,11 +903,7 @@ export class RoomHub extends DurableObject {
     const attachment = socket.deserializeAttachment();
     if (attachment?.userId) {
       await this.env.GLOBAL_PRESENCE.getByName("global").unregister(attachment.socketKey);
-      await this.releaseSpeaker(attachment.userId);
-      const sessions = await this.env.DB.prepare(
-        "SELECT id, mid FROM sfu_sessions WHERE user_id = ? AND room_id = ? AND status <> 'closed'"
-      ).bind(attachment.userId, await this.ctx.storage.get("roomId")).all().catch(() => ({ results: [] }));
-      for (const session of sessions.results || []) await closeSfuSession(this.env, session.id, session.mid);
+      await this.releaseSpeaker(attachment.userId, attachment.socketKey);
     }
     this.broadcast({ type: "room:presence", connected: this.ctx.getWebSockets().length });
   }
@@ -808,7 +912,7 @@ export class RoomHub extends DurableObject {
     const attachment = socket.deserializeAttachment();
     if (attachment?.userId) {
       await this.env.GLOBAL_PRESENCE.getByName("global").unregister(attachment.socketKey);
-      await this.releaseSpeaker(attachment.userId);
+      await this.releaseSpeaker(attachment.userId, attachment.socketKey);
     }
   }
 
@@ -843,17 +947,22 @@ export class GlobalPresence extends DurableObject {
     `);
   }
 
-  async allowLogin(ipHash) {
+  async allowLogin(ipHash, identityHash) {
     const bucket = Math.floor(Date.now() / 900000);
-    const row = this.ctx.storage.sql.exec(
+    const identityKey = "user:" + identityHash;
+    const readAttempts = key => this.ctx.storage.sql.exec(
       "SELECT attempts FROM login_attempts WHERE ip_hash = ? AND bucket = ?",
-      ipHash, bucket
-    ).toArray()[0];
-    if ((row?.attempts || 0) >= 200) return false;
-    this.ctx.storage.sql.exec(
-      "INSERT INTO login_attempts (ip_hash, bucket, attempts) VALUES (?, ?, 1) ON CONFLICT(ip_hash, bucket) DO UPDATE SET attempts = attempts + 1",
-      ipHash, bucket
-    );
+      key, bucket
+    ).toArray()[0]?.attempts || 0;
+    const ipAttempts = readAttempts(ipHash);
+    const identityAttempts = readAttempts(identityKey);
+    if (ipAttempts >= 200 || identityAttempts >= 10) return false;
+    for (const key of [ipHash, identityKey]) {
+      this.ctx.storage.sql.exec(
+        "INSERT INTO login_attempts (ip_hash, bucket, attempts) VALUES (?, ?, 1) ON CONFLICT(ip_hash, bucket) DO UPDATE SET attempts = attempts + 1",
+        key, bucket
+      );
+    }
     this.ctx.storage.sql.exec("DELETE FROM login_attempts WHERE bucket < ?", bucket - 1);
     return true;
   }
@@ -914,6 +1023,21 @@ export default {
       if (request.method === "OPTIONS") return corsResponse(request, env, new Response(null, { status: 204 }));
       const response = await handleApi(request, env);
       if (response) return request.headers.get("upgrade")?.toLowerCase() === "websocket" ? response : corsResponse(request, env, response);
+      const url = new URL(request.url);
+      const assetPath = url.pathname === "/" ? "/index.html" : url.pathname;
+      const embedded = STATIC_ASSETS[assetPath];
+      if (embedded && (request.method === "GET" || request.method === "HEAD")) {
+        const headers = new Headers({
+          "content-type": embedded.contentType,
+          "cache-control": assetPath === "/index.html" || assetPath === "/sw.js" ? "no-cache" : "public, max-age=300"
+        });
+        headers.set("content-security-policy", "default-src 'self'; script-src 'self'; connect-src 'self' wss: stun: turn: turns:; media-src 'self' blob:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; upgrade-insecure-requests");
+        headers.set("x-content-type-options", "nosniff");
+        headers.set("referrer-policy", "strict-origin-when-cross-origin");
+        headers.set("permissions-policy", "microphone=(self), camera=()");
+        headers.set("strict-transport-security", "max-age=31536000");
+        return new Response(request.method === "HEAD" ? null : embedded.content, { status: 200, headers });
+      }
       const asset = await env.ASSETS.fetch(request);
       const headers = new Headers(asset.headers);
       headers.set("content-security-policy", "default-src 'self'; script-src 'self'; connect-src 'self' wss: stun: turn: turns:; media-src 'self' blob:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; upgrade-insecure-requests");

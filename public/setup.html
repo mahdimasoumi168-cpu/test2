@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#123b68">
+<meta name="robots" content="noindex,nofollow">
+<title>راه‌اندازی مدیر اولیه | همیار هیئت</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header><h1>همیار هیئت</h1><p>راه‌اندازی امن مدیر اولیه</p></header>
+<main>
+<section class="card">
+<h2>ساخت حساب مدیر اصلی</h2>
+<p class="muted">این فرم فقط پیش از ایجاد اولین حساب کاربری قابل استفاده است. کلید راه‌اندازی و کدهای ورود فقط برای همین درخواست ارسال می‌شوند و در مرورگر ذخیره نخواهند شد.</p>
+<form id="bootstrapForm">
+<label for="bootstrapKey">کلید راه‌اندازی</label>
+<input id="bootstrapKey" type="password" autocomplete="off" required>
+<label for="fullName">نام و نام خانوادگی مدیر</label>
+<input id="fullName" autocomplete="name" maxlength="120" required>
+<label for="guardianCode">کد سرپرستی</label>
+<input id="guardianCode" type="password" autocomplete="new-password" maxlength="120" required>
+<label for="personCode">کد شخص</label>
+<input id="personCode" type="password" autocomplete="new-password" maxlength="120" required>
+<button id="submitBootstrap" class="primary" type="submit">ایجاد مدیر اصلی</button>
+</form>
+<div id="notice" class="status" role="status" aria-live="polite"></div>
+<p class="muted"><a href="/">بازگشت به صفحه ورود</a></p>
+</section>
+</main>
+<script src="/setup.js" defer></script>
+</body>
+</html>

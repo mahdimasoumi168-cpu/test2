@@ -11,6 +11,31 @@
     sampleRate: 48000
   });
 
+  let preparedContext = null;
+
+  function audioContextClass() {
+    const AudioContextClass = root.AudioContext || root.webkitAudioContext;
+    if (!AudioContextClass) throw new Error("پردازش صوت در این مرورگر پشتیبانی نمی‌شود.");
+    return AudioContextClass;
+  }
+
+  async function prepareAudioContext() {
+    const AudioContextClass = audioContextClass();
+    if (!preparedContext || preparedContext.state === "closed") {
+      preparedContext = new AudioContextClass({ latencyHint: "interactive" });
+    }
+    await preparedContext.resume();
+    return true;
+  }
+
+  async function cancelPreparedContext() {
+    const context = preparedContext;
+    preparedContext = null;
+    if (context && context.state !== "closed") {
+      try { await context.close(); } catch {}
+    }
+  }
+
   async function createProcessedMicrophone(options = {}) {
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error("این مرورگر امکان دسترسی امن به میکروفون را ندارد.");
@@ -30,9 +55,9 @@
 
     let context;
     try {
-      const AudioContextClass = root.AudioContext || root.webkitAudioContext;
-      if (!AudioContextClass) throw new Error("پردازش صوت در این مرورگر پشتیبانی نمی‌شود.");
-      context = new AudioContextClass({ latencyHint: "interactive" });
+      const AudioContextClass = audioContextClass();
+      context = preparedContext || new AudioContextClass({ latencyHint: "interactive" });
+      preparedContext = null;
       await context.resume();
 
       const source = context.createMediaStreamSource(stream);
@@ -99,6 +124,8 @@
 
   root.HamyarAudio = Object.freeze({
     defaults: DEFAULTS,
+    prepareAudioContext,
+    cancelPreparedContext,
     createProcessedMicrophone
   });
 })(globalThis);

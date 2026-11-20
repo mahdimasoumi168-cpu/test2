@@ -12,7 +12,7 @@
 <label for="guardianCode">کد سرپرستی</label><input id="guardianCode" autocomplete="off" required>
 <label for="personCode">کد شخص</label><input id="personCode" autocomplete="off" required>
 <button class="primary" type="submit">ورود به سامانه</button></form><div id="notice" role="status"></div>
-<p class="muted">حساب کاربری باید از قبل توسط مدیر سامانه در سرور ایجاد شده باشد.</p></section>
+<p class="muted">حساب کاربری باید از قبل توسط مدیر سامانه در سرور ایجاد شده باشد.</p><p class="muted"><a href="/setup.html">راه‌اندازی مدیر اولیه</a></p></section>
 <section id="app">
 <section class="card"><div id="welcome"></div><section id="adminPanel" hidden><h2>مدیریت اعضا</h2><form id="memberForm">
 <label for="newName">نام عضو</label><input id="newName" required maxlength="120">
@@ -20,6 +20,7 @@
 <label for="newPerson">کد شخص</label><input id="newPerson" required maxlength="120">
 <label for="newRole">نوع دسترسی</label><select id="newRole"><option value="member">عضو</option><option value="admin">مدیر</option></select>
 <button class="primary" type="submit">ثبت عضو</button></form><div id="adminNotice" class="status"></div><label for="memberSearch">جست‌وجوی اعضا</label><input id="memberSearch" maxlength="80" placeholder="نام یا بخشی از نام"><button id="searchMembers" class="room" type="button">جست‌وجو</button><div id="memberList"></div><button id="moreMembers" class="room" type="button" hidden>نمایش اعضای بیشتر</button>
+<section id="roomAccessEditor" hidden><h3>تخصیص اتاق‌ها به عضو</h3><div id="roomAccessTitle" class="status"></div><div id="roomAccessOptions"></div><button id="saveRoomAccess" class="primary" type="button">ذخیره دسترسی اتاق‌ها</button><button id="cancelRoomAccess" class="room" type="button">انصراف</button></section>
 <h2>مدیریت اتاق‌ها</h2><form id="roomForm">
 <label for="newRoomName">نام اتاق جدید</label><input id="newRoomName" required maxlength="60" placeholder="مثلاً: برنامه‌ریزی">
 <label for="newRoomCapacity">ظرفیت اتاق (۱ تا ۱۰۰ نفر)</label><input id="newRoomCapacity" type="number" min="1" max="100" value="100" required>
