@@ -1,0 +1,11 @@
+{
+  "name": "همیار هیئت",
+  "short_name": "همیار هیئت",
+  "lang": "fa",
+  "dir": "rtl",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f2f5f9",
+  "theme_color": "#123b68",
+  "description": "سامانه ارتباط و هماهنگی اعضای هیئت"
+}
