@@ -1,0 +1,86 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "test2",
+  "main": "cloudflare/src/index.js",
+  "compatibility_date": "2026-11-20",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": [
+      "/api/*"
+    ]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "hamyar-heyat-db",
+      "database_id": "b94c96d1-191a-4c6f-b303-cde4860484f6"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ROOM_HUB",
+        "class_name": "RoomHub"
+      },
+      {
+        "name": "GLOBAL_PRESENCE",
+        "class_name": "GlobalPresence"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "RoomHub",
+        "GlobalPresence"
+      ]
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.1
+    }
+  },
+  "previews": {
+    "vars": {
+      "ENVIRONMENT": "preview",
+      "SESSION_SECRET": "preview-only-session-secret-not-for-production-2026",
+      "BOOTSTRAP_ADMIN_KEY": "preview-only-bootstrap-key-not-for-production",
+      "CODE_PEPPER": "preview-only-code-pepper-not-for-production-2026",
+      "ALLOWED_ORIGINS": "capacitor://localhost,http://localhost"
+    },
+    "d1_databases": [
+      {
+        "binding": "DB",
+        "database_name": "hamyar-heyat-stage-db",
+        "database_id": "4e266a94-4b36-428a-bbd2-d2b1e342a3f9"
+      }
+    ],
+    "durable_objects": {
+      "bindings": [
+        {
+          "name": "ROOM_HUB",
+          "class_name": "RoomHub"
+        },
+        {
+          "name": "GLOBAL_PRESENCE",
+          "class_name": "GlobalPresence"
+        }
+      ]
+    }
+  },
+  "vars": {
+    "ALLOWED_ORIGINS": "capacitor://localhost,http://localhost",
+    "TURN_KEY_ID": "649dc037db48650d26c1b96a882bd040"
+  }
+}
