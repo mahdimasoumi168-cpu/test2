@@ -5,7 +5,6 @@ class HamyarAudioHandler extends BaseAudioHandler {
   Future<void> Function()? onPauseAudio;
   Future<void> Function()? onResumeAudio;
   Future<void> Function()? onStopRoom;
-  Future<void> Function()? onStopRoom;
 
   void setRoom(String? roomName) {
     _roomName = roomName;
@@ -53,8 +52,8 @@ class HamyarAudioHandler extends BaseAudioHandler {
 
   @override
   Future<void> stop() async {
-    await Helper.pauseAudioPlayout();
     await onStopRoom?.call();
+    await onPauseAudio?.call();
     setRoom(null);
     await super.stop();
   }
