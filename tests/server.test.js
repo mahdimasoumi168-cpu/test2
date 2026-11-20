@@ -89,6 +89,46 @@ test("authentication and admin member APIs enforce roles", { timeout: 30000 }, a
   assert.equal(managementDenied.ok, false);
   const joined = await new Promise(resolve => socket.emit("room:join", { roomId: "nazm" }, resolve));
   assert.equal(joined.ok, true);
+  const grantedPromise = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("PTT grant was not delivered")), 2000);
+    socket.once("ptt:granted", value => { clearTimeout(timer); resolve(value); });
+  });
+  socket.emit("ptt:request", { roomId: "nazm" });
+  const grant = await grantedPromise;
+  assert.equal(grant.memberName, "عضو آزمایشی");
+  socket.emit("ptt:release", { roomId: "nazm" });
+
+  const switched = await new Promise(resolve => socket.emit("room:join", { roomId: "khademin" }, resolve));
+  assert.equal(switched.ok, true);
+  await new Promise(resolve => setTimeout(resolve, 400));
+  let staleRoomGrant = false;
+  const staleGrantListener = () => { staleRoomGrant = true; };
+  socket.once("ptt:granted", staleGrantListener);
+  socket.emit("ptt:request", { roomId: "nazm" });
+  await new Promise(resolve => setTimeout(resolve, 450));
+  socket.off("ptt:granted", staleGrantListener);
+  assert.equal(staleRoomGrant, false, "socket must not request PTT from a room it left");
+
+  const rejoined = await new Promise(resolve => socket.emit("room:join", { roomId: "nazm" }, resolve));
+  assert.equal(rejoined.ok, true);
+  const roomDisabledEvent = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("disabled room event was not delivered")), 2000);
+    socket.once("room:disabled", () => { clearTimeout(timer); resolve(); });
+  });
+  const disabledRoom = await fetch(base + "/api/admin/rooms/nazm/active", {
+    method: "PATCH",
+    headers: { Authorization: "Bearer " + admin.data.token, "Content-Type": "application/json" },
+    body: JSON.stringify({ active: false })
+  });
+  assert.equal(disabledRoom.status, 200);
+  await roomDisabledEvent;
+  let disabledRoomGrant = false;
+  const disabledGrantListener = () => { disabledRoomGrant = true; };
+  socket.once("ptt:granted", disabledGrantListener);
+  socket.emit("ptt:request", { roomId: "nazm" });
+  await new Promise(resolve => setTimeout(resolve, 450));
+  socket.off("ptt:granted", disabledGrantListener);
+  assert.equal(disabledRoomGrant, false, "disabled rooms must not grant PTT");
 
   const deactivated = await fetch(base + "/api/admin/members/" + memberId + "/active", {
     method: "PATCH",
