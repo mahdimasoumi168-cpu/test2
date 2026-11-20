@@ -38,7 +38,7 @@ button{font:inherit;border:0;border-radius:11px;padding:13px 16px;cursor:pointer
 <button id="logout" class="primary">خروج از حساب</button></section>
 <p class="muted">نسخهٔ اولیهٔ همیار هیئت · برای عملکرد عملیاتی به HTTPS و سرور رسانه نیاز است.</p>
 </main>
-<script src="/socket.io/socket.io.js"></script><script>
+<script src="/socket.io/socket.io.js"></script><script src="/audio-processing.js"></script><script>
 if("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(()=>{});
 const $=id=>document.getElementById(id), form=$("loginForm"), notice=$("notice");
 let token=null,socket=null,room=null,holding=false;
