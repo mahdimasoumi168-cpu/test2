@@ -378,6 +378,25 @@ async function handleApi(request, env) {
 
   if (path === "/api/me" && request.method === "GET") return json({ member: user });
 
+  if (path === "/api/ice-servers" && request.method === "GET") {
+    if (!env.TURN_KEY_ID || !env.TURN_KEY_SECRET) {
+      return json({ iceServers: [{ urls: "stun:stun.cloudflare.com:3478" }], turn: false });
+    }
+    try {
+      const response = await fetch("https://rtc.live.cloudflare.com/v1/turn/keys/" + env.TURN_KEY_ID + "/credentials/generate-ice-servers", {
+        method: "POST",
+        headers: { authorization: "Bearer " + env.TURN_KEY_SECRET, "content-type": "application/json" },
+        body: JSON.stringify({ ttl: 43200 })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !Array.isArray(data.iceServers)) throw new Error("TURN credential generation failed.");
+      return json({ iceServers: data.iceServers, turn: true });
+    } catch (error) {
+      console.warn("TURN credentials:", error.message);
+      return json({ iceServers: [{ urls: "stun:stun.cloudflare.com:3478" }], turn: false });
+    }
+  }
+
   if (path === "/api/rooms" && request.method === "GET") {
     const rooms = user.role === "admin"
       ? await env.DB.prepare("SELECT id, name, max_members FROM rooms WHERE is_active = 1 ORDER BY CASE WHEN id = 'management' THEN 0 ELSE 1 END, name").all()
