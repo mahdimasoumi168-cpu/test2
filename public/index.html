@@ -22,13 +22,13 @@
 <button class="primary" type="submit">ثبت عضو</button></form><div id="adminNotice" class="status"></div><label for="memberSearch">جست‌وجوی اعضا</label><input id="memberSearch" maxlength="80" placeholder="نام یا بخشی از نام"><button id="searchMembers" class="room" type="button">جست‌وجو</button><div id="memberList"></div><button id="moreMembers" class="room" type="button" hidden>نمایش اعضای بیشتر</button>
 <h2>مدیریت اتاق‌ها</h2><form id="roomForm">
 <label for="newRoomName">نام اتاق جدید</label><input id="newRoomName" required maxlength="60" placeholder="مثلاً: برنامه‌ریزی">
-<label for="newRoomCapacity">ظرفیت اتاق (۱ تا ۵۰۰ نفر)</label><input id="newRoomCapacity" type="number" min="1" max="500" value="50" required>
+<label for="newRoomCapacity">ظرفیت اتاق (۱ تا ۱۰۰ نفر)</label><input id="newRoomCapacity" type="number" min="1" max="100" value="100" required>
 <button class="primary" type="submit">افزودن اتاق</button></form>
 <div id="roomAdminList"></div>
 <h2>گزارش فعالیت مدیران</h2><button id="loadAudit" class="room" type="button">نمایش گزارش آخرین فعالیت‌ها</button><div id="auditList"></div></section><h2>اتاق‌های ارتباطی</h2><div id="roomGrid" class="rooms"></div></section>
 <section class="card"><h2>ارتباط بی‌سیم</h2><button id="ptt" class="ptt">برای صحبت نگه دارید</button><div id="status" class="status">ابتدا یک اتاق انتخاب کنید.</div><audio id="remoteAudio" autoplay playsinline></audio>
 <p class="muted">فقط دارنده نوبت می‌تواند صدا منتشر کند؛ هنگام رهاکردن دکمه، انتشار صدا متوقف می‌شود. دریافت در پس‌زمینه به نسخه بومی اندروید و iOS نیاز دارد.</p></section>
 <button id="logout" class="primary">خروج از حساب</button></section>
-<p class="muted">نسخهٔ اولیهٔ همیار هیئت · برای عملکرد عملیاتی به HTTPS و سرور رسانه نیاز است.</p>
+<p class="muted">نسخه توسعه همیار هیئت · انتقال صوت از طریق Cloudflare Realtime · دریافت در پس‌زمینه نیازمند اپلیکیشن بومی است.</p>
 </main>
 <script src="/audio-processing.js" defer></script><script src="/app.js" defer></script></body></html>
