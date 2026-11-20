@@ -238,6 +238,11 @@ async function handleSfu(request, env, user, url) {
       if (result.tracks?.some(track => track.errorCode || track.errorDescription)) throw new Error("SFU ترک صوتی را نپذیرفت.");
       await env.DB.prepare("UPDATE sfu_sessions SET status = 'published', mid = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?")
         .bind(body.mid, sessionId).run();
+      const attached = await hub.attachPublisher(user.id, sessionId);
+      if (!attached) {
+        await closeSfuSession(env, sessionId, body.mid);
+        return json({ error: "مجوز صحبت پیش از آماده‌شدن صدا منقضی شد." }, 409);
+      }
       return json(result);
     } catch (error) {
       await closeSfuSession(env, sessionId, body.mid);
@@ -690,7 +695,7 @@ export class RoomHub extends DurableObject {
     }
   }
 
-  async announcePublisher(userId, sessionId) {
+  async attachPublisher(userId, sessionId) {
     const current = await this.getSpeaker();
     if (!current || current.userId !== userId || !sessionId) return false;
     const roomId = await this.ctx.storage.get("roomId");
@@ -699,6 +704,17 @@ export class RoomHub extends DurableObject {
     ).bind(sessionId, userId, roomId).first();
     if (!session) return false;
     this.ctx.storage.sql.exec("UPDATE speaker SET session_id = ? WHERE id = 1 AND user_id = ?", sessionId, userId);
+    return true;
+  }
+
+  async announcePublisher(userId, sessionId) {
+    const current = await this.getSpeaker();
+    if (!current || current.userId !== userId || current.sessionId !== sessionId) return false;
+    const roomId = await this.ctx.storage.get("roomId");
+    const session = await this.env.DB.prepare(
+      "SELECT id FROM sfu_sessions WHERE id = ? AND user_id = ? AND room_id = ? AND session_type = 'publisher' AND status = 'published'"
+    ).bind(sessionId, userId, roomId).first();
+    if (!session) return false;
     this.broadcast({ type: "ptt:published", memberId: userId, memberName: current.displayName, sessionId });
     return true;
   }
