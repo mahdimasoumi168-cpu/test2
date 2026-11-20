@@ -15,11 +15,14 @@ jobs:
         with:
           node-version: 22
       - run: npm install --no-audit --no-fund --legacy-peer-deps
+      - run: npm run assets:embed
+      - run: git diff --exit-code -- cloudflare/src/embedded-assets.js
       - run: node --check server.js
       - run: node --check scripts/add-member.js
       - run: node --check public/audio-processing.js
       - run: node --check public/app.js
       - run: node --check cloudflare/src/index.js
+      - run: node --check cloudflare/src/embedded-assets.js
       - run: npx wrangler deploy --dry-run --config wrangler.jsonc
       - run: npm test
       - name: Build production container
