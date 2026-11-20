@@ -78,7 +78,9 @@ Use your own administrator name and codes. The endpoint refuses to create anothe
 
 ## Zero-cost constraints
 
-No paid Cloudflare plan or paid third-party service is configured in this repository. Free-tier limits still apply and are not a capacity guarantee. At 100 users, actual media egress, Workers requests, Durable Objects requests, CPU time, and mobile network behavior must be load-tested. If the free quota is exceeded, service may be throttled or stop until reset; do not enable paid overages.
+No paid third-party conferencing service is configured. Cloudflare Realtime includes 1,000 GB/month shared SFU+TURN egress; usage above that is currently billed at $0.05/GB. Do not assume Cloudflare will automatically stop the service at the free limit. Monitor account-wide Realtime usage and configure billing/usage controls before production. The estimate and suggested 700–800 GB operating guardrail are documented in `docs/CAPACITY_AND_COST.md`.
+
+Workers, Durable Objects, and D1 have separate Free-plan quotas and limits. At 100 users, actual media egress, Worker requests, Durable Object requests, CPU time, and mobile network behavior must be load-tested. This repository does not yet implement an authoritative account-wide billing cutoff; zero-cost operation is not guaranteed until usage monitoring and account billing controls are configured.
 
 ## Release gate
 
