@@ -238,11 +238,6 @@ async function handleSfu(request, env, user, url) {
       if (result.tracks?.some(track => track.errorCode || track.errorDescription)) throw new Error("SFU ترک صوتی را نپذیرفت.");
       await env.DB.prepare("UPDATE sfu_sessions SET status = 'published', mid = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?")
         .bind(body.mid, sessionId).run();
-      const announced = await hub.announcePublisher(user.id, sessionId);
-      if (!announced) {
-        await closeSfuSession(env, sessionId, body.mid);
-        return json({ error: "نوبت صحبت در حین اتصال منقضی شد." }, 409);
-      }
       return json(result);
     } catch (error) {
       await closeSfuSession(env, sessionId, body.mid);
@@ -713,10 +708,11 @@ export class RoomHub extends DurableObject {
     this.ctx.storage.sql.exec("DELETE FROM speaker WHERE id = 1");
     await this.ctx.storage.deleteAlarm();
     this.broadcast({ type: "ptt:released", memberId: current.user_id, sessionId: current.session_id || null });
-    if (current.session_id) {
-      const session = await this.env.DB.prepare("SELECT mid FROM sfu_sessions WHERE id = ?").bind(current.session_id).first();
-      await closeSfuSession(this.env, current.session_id, session?.mid || null);
-    }
+    const roomId = await this.ctx.storage.get("roomId");
+    const sessions = await this.env.DB.prepare(
+      "SELECT id, mid FROM sfu_sessions WHERE user_id = ? AND room_id = ? AND session_type = 'publisher' AND status <> 'closed'"
+    ).bind(current.user_id, roomId).all().catch(() => ({ results: [] }));
+    for (const session of sessions.results || []) await closeSfuSession(this.env, session.id, session.mid);
   }
 
   async revokeUser(userId) {
