@@ -196,6 +196,10 @@ io.on("connection", socket => {
       if (typeof ack === "function") ack({ ok: false, error: "اتاق معتبر نیست." });
       return;
     }
+    if (roomId === "management" && socket.member.role !== "admin") {
+      if (typeof ack === "function") ack({ ok: false, error: "ورود به اتاق مدیریت مجاز نیست." });
+      return;
+    }
     socket.join(roomId);
     socket.data.joinedRooms.add(roomId);
     if (typeof ack === "function") ack({ ok: true, roomId });
