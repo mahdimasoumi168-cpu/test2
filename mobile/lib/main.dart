@@ -1,7 +1,7 @@
 import 'package:audio_service/audio_service.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import 'audio_handler.dart';
 import 'voice_controller.dart';
@@ -10,14 +10,14 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final handler = await AudioService.init(
     builder: HamyarAudioHandler.new,
-    config: const AudioServiceConfig(
+    config: AudioServiceConfig(
       androidNotificationChannelId: 'ir.heyat.hamyar.audio',
       androidNotificationChannelName: 'همیار هیئت',
       androidNotificationOngoing: true,
       androidStopForegroundOnPause: false,
     ),
   );
-  runApp(HamyarApp(audioHandler: handler as HamyarAudioHandler));
+  runApp(HamyarApp(audioHandler: handler));
 }
 
 class HamyarApp extends StatefulWidget {
@@ -44,8 +44,6 @@ class _HamyarAppState extends State<HamyarApp> with WidgetsBindingObserver {
         state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
       controller.releaseTalk();
-    } else if (state == AppLifecycleState.resumed && controller.connected) {
-      Helper.resumeAudioPlayout();
     }
   }
 
@@ -270,7 +268,6 @@ class HomePage extends StatelessWidget {
                         onPointerDown: (_) => controller.requestTalk(),
                         onPointerUp: (_) => controller.releaseTalk(),
                         onPointerCancel: (_) => controller.releaseTalk(),
-                        onPointerExit: (_) => controller.releaseTalk(),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 120),
                           height: 112,
