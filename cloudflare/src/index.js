@@ -1,7 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 
 const SESSION_SECONDS = 12 * 60 * 60;
-const PBKDF2_ITERATIONS = 150000;
 const PTT_LEASE_MS = 20000;
 const PTT_HEARTBEAT_MIN_INTERVAL_MS = 2000;
 const MAX_ROOM_MEMBERS = 100;
@@ -29,25 +28,28 @@ function constantTimeEqual(a, b) {
   for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
   return diff === 0;
 }
-async function deriveCodeHash(code, salt, iterations = PBKDF2_ITERATIONS) {
-  const key = await crypto.subtle.importKey("raw", encoder.encode(code), "PBKDF2", false, ["deriveBits"]);
-  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt, iterations, hash: "SHA-256" }, key, 256);
-  return new Uint8Array(bits);
-}
-async function hashCode(code) {
+async function hashCode(code, pepper) {
   const salt = crypto.getRandomValues(new Uint8Array(16));
-  const hash = await deriveCodeHash(code, salt);
-  return `pbkdf2$${PBKDF2_ITERATIONS}$${b64url(salt)}$${b64url(hash)}`;
+  const key = await crypto.subtle.importKey("raw", encoder.encode(pepper), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const material = new Uint8Array(salt.length + encoder.encode(code).length);
+  material.set(salt, 0);
+  material.set(encoder.encode(code), salt.length);
+  const signature = await crypto.subtle.sign("HMAC", key, material);
+  return "hmac-sha256$" + b64url(salt) + "$" + b64url(new Uint8Array(signature));
 }
-async function verifyCode(code, encoded) {
-  if (typeof encoded !== "string" || !encoded.startsWith("pbkdf2$")) return false;
+async function verifyCode(code, encoded, pepper) {
+  if (typeof encoded !== "string" || !encoded.startsWith("hmac-sha256$") || !pepper) return false;
   const parts = encoded.split("$");
-  if (parts.length !== 4) return false;
-  const iterations = Number(parts[1]);
-  if (!Number.isInteger(iterations) || iterations < 100000 || iterations > 600000) return false;
+  if (parts.length !== 3) return false;
   try {
-    const actual = await deriveCodeHash(code, unb64url(parts[2]), iterations);
-    return constantTimeEqual(actual, unb64url(parts[3]));
+    const salt = unb64url(parts[1]);
+    const key = await crypto.subtle.importKey("raw", encoder.encode(pepper), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const value = encoder.encode(code);
+    const material = new Uint8Array(salt.length + value.length);
+    material.set(salt, 0);
+    material.set(value, salt.length);
+    const actual = new Uint8Array(await crypto.subtle.sign("HMAC", key, material));
+    return constantTimeEqual(actual, unb64url(parts[2]));
   } catch { return false; }
 }
 async function signToken(payload, secret) {
@@ -120,8 +122,8 @@ async function createMember(env, body, role = "member") {
   }
   if (!["admin", "member"].includes(role)) throw new Error("نقش انتخاب‌شده معتبر نیست.");
   const id = crypto.randomUUID();
-  const guardianHash = await hashCode(guardianCode);
-  const personHash = await hashCode(personCode);
+  const guardianHash = await hashCode(guardianCode, env.CODE_PEPPER);
+  const personHash = await hashCode(personCode, env.CODE_PEPPER);
   await env.DB.prepare(
     "INSERT INTO users (id, display_name, login_code_hash, guardian_code_hash, person_code_hash, role, is_active, session_version) VALUES (?, ?, ?, ?, ?, ?, 1, 0)"
   ).bind(id, fullName, guardianHash, guardianHash, personHash, role).run();
@@ -304,9 +306,13 @@ async function handleApi(request, env) {
   }
 
   if (path === "/api/login" && request.method === "POST") {
-    if (!env.SESSION_SECRET) return json({ error: "کلید نشست سرور تنظیم نشده است." }, 503);
+    if (!env.SESSION_SECRET || !env.CODE_PEPPER) return json({ error: "کلیدهای امنیتی سرور تنظیم نشده‌اند." }, 503);
     let body;
     try { body = await request.json(); } catch { return json({ error: "درخواست ورود معتبر نیست." }, 400); }
+    const ip = request.headers.get("cf-connecting-ip") || "unknown";
+    const ipHash = b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(ip))));
+    const loginAllowed = await env.GLOBAL_PRESENCE.getByName("global").allowLogin(ipHash);
+    if (!loginAllowed) return json({ error: "تعداد تلاش‌های ورود زیاد است؛ ۱۵ دقیقه دیگر دوباره امتحان کنید." }, 429);
     const fullName = typeof body.fullName === "string" ? body.fullName.trim().normalize("NFC") : "";
     const guardianCode = typeof body.guardianCode === "string" ? body.guardianCode.trim() : "";
     const personCode = typeof body.personCode === "string" ? body.personCode.trim() : "";
@@ -318,8 +324,8 @@ async function handleApi(request, env) {
     ).bind(fullName).all();
     let user = null;
     for (const candidate of candidates.results || []) {
-      const guardianOk = await verifyCode(guardianCode, candidate.guardian_code_hash);
-      const personOk = await verifyCode(personCode, candidate.person_code_hash);
+      const guardianOk = await verifyCode(guardianCode, candidate.guardian_code_hash, env.CODE_PEPPER);
+      const personOk = await verifyCode(personCode, candidate.person_code_hash, env.CODE_PEPPER);
       if (guardianOk && personOk) { user = candidate; break; }
     }
     if (!user) {
@@ -332,7 +338,7 @@ async function handleApi(request, env) {
   }
 
   if (path === "/api/admin/bootstrap" && request.method === "POST") {
-    if (!env.BOOTSTRAP_ADMIN_KEY || !env.SESSION_SECRET) return json({ error: "راه‌اندازی اولیه پیکربندی نشده است." }, 503);
+    if (!env.BOOTSTRAP_ADMIN_KEY || !env.SESSION_SECRET || !env.CODE_PEPPER) return json({ error: "راه‌اندازی اولیه پیکربندی نشده است." }, 503);
     const supplied = request.headers.get("x-bootstrap-key") || "";
     if (!constantTimeEqual(encoder.encode(supplied), encoder.encode(env.BOOTSTRAP_ADMIN_KEY))) return json({ error: "کلید راه‌اندازی معتبر نیست." }, 403);
     const count = await env.DB.prepare("SELECT COUNT(*) AS total FROM users").first();
@@ -415,11 +421,11 @@ async function handleApi(request, env) {
     }
     if (body.guardianCode !== undefined) {
       if (typeof body.guardianCode !== "string" || body.guardianCode.trim().length < 4 || body.guardianCode.length > 120) return json({ error: "کد سرپرستی معتبر نیست." }, 400);
-      const hash = await hashCode(body.guardianCode.trim()); fields.push("guardian_code_hash = ?"); values.push(hash);
+      const hash = await hashCode(body.guardianCode.trim(), env.CODE_PEPPER); fields.push("guardian_code_hash = ?"); values.push(hash);
     }
     if (body.personCode !== undefined) {
       if (typeof body.personCode !== "string" || body.personCode.trim().length < 4 || body.personCode.length > 120) return json({ error: "کد شخص معتبر نیست." }, 400);
-      const hash = await hashCode(body.personCode.trim()); fields.push("person_code_hash = ?"); values.push(hash);
+      const hash = await hashCode(body.personCode.trim(), env.CODE_PEPPER); fields.push("person_code_hash = ?"); values.push(hash);
     }
     if (!fields.length) return json({ error: "حداقل یک مورد برای ویرایش لازم است." }, 400);
     fields.push("session_version = session_version + 1", "updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')");
@@ -769,8 +775,29 @@ export class GlobalPresence extends DurableObject {
         user_id TEXT NOT NULL,
         room_id TEXT NOT NULL,
         expires_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS login_attempts (
+        ip_hash TEXT NOT NULL,
+        bucket INTEGER NOT NULL,
+        attempts INTEGER NOT NULL,
+        PRIMARY KEY (ip_hash, bucket)
       )
     `);
+  }
+
+  async allowLogin(ipHash) {
+    const bucket = Math.floor(Date.now() / 900000);
+    const row = this.ctx.storage.sql.exec(
+      "SELECT attempts FROM login_attempts WHERE ip_hash = ? AND bucket = ?",
+      ipHash, bucket
+    ).toArray()[0];
+    if ((row?.attempts || 0) >= 10) return false;
+    this.ctx.storage.sql.exec(
+      "INSERT INTO login_attempts (ip_hash, bucket, attempts) VALUES (?, ?, 1) ON CONFLICT(ip_hash, bucket) DO UPDATE SET attempts = attempts + 1",
+      ipHash, bucket
+    );
+    this.ctx.storage.sql.exec("DELETE FROM login_attempts WHERE bucket < ?", bucket - 1);
+    return true;
   }
 
   async scheduleCleanup() {
@@ -817,6 +844,7 @@ export class GlobalPresence extends DurableObject {
 
   async alarm() {
     this.ctx.storage.sql.exec("DELETE FROM active_connections WHERE expires_at <= ?", Date.now());
+    this.ctx.storage.sql.exec("DELETE FROM login_attempts WHERE bucket < ?", Math.floor(Date.now() / 900000) - 1);
     await this.scheduleCleanup();
   }
 }
