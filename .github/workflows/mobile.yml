@@ -10,11 +10,6 @@ on:
     paths:
       - "mobile/**"
       - ".github/workflows/mobile.yml"
-  pull_request:
-    branches: [cloudflare-voice-phase2]
-    paths:
-      - "mobile/**"
-      - ".github/workflows/mobile.yml"
   workflow_dispatch:
 
 jobs:
