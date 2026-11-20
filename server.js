@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS members (
  person_code_hash TEXT NOT NULL,
  role TEXT NOT NULL DEFAULT 'member',
  active INTEGER NOT NULL DEFAULT 1,
+ session_version INTEGER NOT NULL DEFAULT 0,
  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_members_active_name ON members(active, full_name);
@@ -57,6 +58,10 @@ CREATE TABLE IF NOT EXISTS rooms (
  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 `);
+const memberColumns = db.prepare("PRAGMA table_info(members)").all().map(column => column.name);
+if (!memberColumns.includes("session_version")) {
+  db.exec("ALTER TABLE members ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0");
+}
 const roomColumns = db.prepare("PRAGMA table_info(rooms)").all().map(column => column.name);
 if (!roomColumns.includes("max_members")) {
   db.exec("ALTER TABLE rooms ADD COLUMN max_members INTEGER NOT NULL DEFAULT 50 CHECK (max_members BETWEEN 1 AND 500)");
@@ -93,7 +98,8 @@ const roomHolders = new Map();
 function signSession(member) {
   const payload = Buffer.from(JSON.stringify({
     sub: member.id,
-    exp: Date.now() + 12 * 60 * 60 * 1000
+    exp: Date.now() + 12 * 60 * 60 * 1000,
+    ver: member.session_version || 0
   })).toString("base64url");
   const sig = crypto.createHmac("sha256", secret).update(payload).digest("base64url");
   return payload + "." + sig;
@@ -112,7 +118,9 @@ function verifySession(token) {
   try {
     const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
     if (!Number.isSafeInteger(data.sub) || !Number.isFinite(data.exp) || data.exp < Date.now()) return null;
-    return db.prepare("SELECT id, full_name, role FROM members WHERE id = ? AND active = 1").get(data.sub) || null;
+    const member = db.prepare("SELECT id, full_name, role, session_version FROM members WHERE id = ? AND active = 1").get(data.sub);
+    if (!member || data.ver !== member.session_version) return null;
+    return member;
   } catch { return null; }
 }
 
@@ -240,7 +248,7 @@ app.patch("/api/admin/rooms/:id", requireMember, requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-app.patch("/api/admin/members/:id", requireMember, requireAdmin, (req, res) => {
+app.patch("/api/admin/members/:id", requireMember, requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isSafeInteger(id) || id < 1) return res.status(400).json({ error: "شناسه عضو معتبر نیست." });
   const target = db.prepare("SELECT id, role, active FROM members WHERE id = ?").get(id);
@@ -268,9 +276,18 @@ app.patch("/api/admin/members/:id", requireMember, requireAdmin, (req, res) => {
   if (role !== undefined) { fields.push("role = ?"); values.push(role); }
   if (guardianCode !== undefined) { fields.push("guardian_code_hash = ?"); values.push(bcrypt.hashSync(guardianCode.trim(), 12)); }
   if (personCode !== undefined) { fields.push("person_code_hash = ?"); values.push(bcrypt.hashSync(personCode.trim(), 12)); }
+  fields.push("session_version = session_version + 1");
   values.push(id);
   db.prepare("UPDATE members SET " + fields.join(", ") + " WHERE id = ?").run(...values);
   auditEvent(req.member.id, "member.updated", id, { changed: fields.map(x => x.split(" ")[0]) });
+  const sockets = await io.fetchSockets();
+  for (const connected of sockets) {
+    if (connected.member?.id === id) {
+      for (const roomId of connected.data.joinedRooms || []) releaseHolder(roomId, connected.id);
+      connected.emit("session:revoked", { reason: "account_updated" });
+      connected.disconnect(true);
+    }
+  }
   res.json({ ok: true });
 });
 
@@ -310,7 +327,7 @@ app.patch("/api/admin/members/:id/active", requireMember, requireAdmin, async (r
     const count = db.prepare("SELECT COUNT(*) AS n FROM members WHERE role = 'admin' AND active = 1").get().n;
     if (count <= 1) return res.status(409).json({ error: "غیرفعال‌کردن آخرین مدیر مجاز نیست." });
   }
-  db.prepare("UPDATE members SET active = ? WHERE id = ?").run(active ? 1 : 0, id);
+  db.prepare("UPDATE members SET active = ?, session_version = session_version + 1 WHERE id = ?").run(active ? 1 : 0, id);
   auditEvent(req.member.id, active ? "member.activated" : "member.deactivated", id);
   if (!active) {
     const sockets = await io.fetchSockets();
@@ -347,7 +364,7 @@ app.post("/api/login", (req, res) => {
 
   const normalizedName = fullName.trim().normalize("NFC");
   const candidates = db.prepare(
-    "SELECT id, full_name, guardian_code_hash, person_code_hash, role FROM members WHERE active = 1"
+    "SELECT id, full_name, guardian_code_hash, person_code_hash, role, session_version FROM members WHERE active = 1"
   ).all().filter(m => m.full_name.trim().normalize("NFC") === normalizedName);
 
   let member = null;
