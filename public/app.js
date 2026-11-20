@@ -1,9 +1,9 @@
 if("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(()=>{});
 const $=id=>document.getElementById(id), form=$("loginForm"), notice=$("notice");
-let token=null,socket=null,room=null,holding=false,joiningRoom=false,memberOffset=0;
+let token=null,socket=null,room=null,holding=false,joiningRoom=false,memberOffset=0,member=null,roomConnectionKey=null;
 form.addEventListener("submit",async e=>{e.preventDefault();notice.textContent="در حال بررسی اطلاعات...";
 try{const r=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({fullName:$("fullName").value,guardianCode:$("guardianCode").value,personCode:$("personCode").value})});
-const data=await r.json();if(!r.ok)throw new Error(data.error||"ورود انجام نشد.");token=data.token;$("login").style.display="none";$("app").style.display="block";$("welcome").textContent="خوش آمدید، "+data.member.name+(data.member.role==="admin"?" · مدیر":"");if(data.member.role==="admin"){$("adminPanel").hidden=false;loadMembers();loadAdminRooms();}loadRooms();connect();}catch(err){notice.textContent=err.message||"ارتباط با سرور برقرار نشد."}});
+const data=await r.json();if(!r.ok)throw new Error(data.error||"ورود انجام نشد.");token=data.token;member=data.member;$("login").style.display="none";$("app").style.display="block";$("welcome").textContent="خوش آمدید، "+data.member.name+(data.member.role==="admin"?" · مدیر":"");if(data.member.role==="admin"){$("adminPanel").hidden=false;loadMembers();loadAdminRooms();}loadRooms();connect();}catch(err){notice.textContent=err.message||"ارتباط با سرور برقرار نشد."}});
 async function api(url,options={}){const r=await fetch(url,{...options,headers:{...(options.headers||{}),Authorization:"Bearer "+token,"Content-Type":"application/json"}});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||"درخواست انجام نشد.");return d;}
 async function loadMembers(reset=true){try{if(reset){memberOffset=0;$("memberList").innerHTML="";}const q=encodeURIComponent($("memberSearch").value.trim());const d=await api("/api/admin/members?limit=50&offset="+memberOffset+"&q="+q);d.members.forEach(m=>{const row=document.createElement("div");row.className="status";row.textContent=m.full_name+" · "+(m.role==="admin"?"مدیر":"عضو")+" · "+(m.active?"فعال":"غیرفعال");const role=document.createElement("button");role.className="room";role.textContent=m.role==="admin"?"تبدیل به عضو":"ارتقای مدیر";role.addEventListener("click",async()=>{try{await api("/api/admin/members/"+m.id,{method:"PATCH",body:JSON.stringify({role:m.role==="admin"?"member":"admin"})});await loadMembers();}catch(e){$("adminNotice").textContent=e.message;}});const edit=document.createElement("button");edit.className="room";edit.textContent="ویرایش مشخصات";edit.addEventListener("click",async()=>{const fullName=prompt("نام و نام خانوادگی",m.full_name);if(fullName===null)return;const guardianCode=prompt("کد سرپرستی جدید (خالی = بدون تغییر)","");if(guardianCode===null)return;const personCode=prompt("کد شخص جدید (خالی = بدون تغییر)","");if(personCode===null)return;const body={fullName};if(guardianCode.trim())body.guardianCode=guardianCode;if(personCode.trim())body.personCode=personCode;try{await api("/api/admin/members/"+m.id,{method:"PATCH",body:JSON.stringify(body)});await loadMembers();}catch(e){$("adminNotice").textContent=e.message;}});const active=document.createElement("button");active.className="room";active.textContent=m.active?"غیرفعال‌کردن":"فعال‌کردن";active.addEventListener("click",async()=>{try{await api("/api/admin/members/"+m.id+"/active",{method:"PATCH",body:JSON.stringify({active:!m.active})});await loadMembers();}catch(e){$("adminNotice").textContent=e.message;}});row.append(" ",edit," ",role," ",active);$("memberList").append(row);});memberOffset=d.nextOffset??0;$("moreMembers").hidden=d.nextOffset===null;}catch(e){$("adminNotice").textContent=e.message;}}
 $("memberForm").addEventListener("submit",async e=>{e.preventDefault();try{await api("/api/admin/members",{method:"POST",body:JSON.stringify({fullName:$("newName").value,guardianCode:$("newGuardian").value,personCode:$("newPerson").value,role:$("newRole").value})});e.target.reset();$("adminNotice").textContent="عضو ثبت شد.";loadMembers();}catch(err){$("adminNotice").textContent=err.message;}});
@@ -74,7 +74,7 @@ async function startPublisher(){
   let sessionId=null,microphone=null,pc=null;
   try{
     if(!currentTalk(generation)||publisher)return;
-    const created=await api("/api/sfu/sessions",{method:"POST",body:JSON.stringify({roomId:room,type:"publisher"})});
+    const created=await api("/api/sfu/sessions",{method:"POST",body:JSON.stringify({roomId:room,type:"publisher",connectionKey:roomConnectionKey})});
     sessionId=created.sessionId;
     if(!currentTalk(generation))throw new Error("لغو شد");
     if(!window.HamyarAudio?.createProcessedMicrophone)throw new Error("پردازش میکروفون بارگذاری نشده است.");
@@ -96,7 +96,7 @@ async function startPublisher(){
     const mid=transceiver.mid;
     if(mid===null||mid===undefined)throw new Error("شناسه ترک صوتی ساخته نشد.");
     const answer=await api("/api/sfu/sessions/"+encodeURIComponent(sessionId)+"/publish",{
-      method:"POST",body:JSON.stringify({sessionDescription:pc.localDescription,mid})
+      method:"POST",body:JSON.stringify({sessionDescription:pc.localDescription,mid,connectionKey:roomConnectionKey})
     });
     if(!answer.sessionDescription)throw new Error("پاسخ SFU برای انتشار صوت دریافت نشد.");
     await pc.setRemoteDescription(answer.sessionDescription);
@@ -131,7 +131,7 @@ async function startSubscriber(publisherSessionId){
     const created=await api("/api/sfu/sessions",{method:"POST",body:JSON.stringify({roomId:room,type:"subscriber"})});
     sessionId=created.sessionId;
     if(!valid())throw new Error("لغو شد");
-    pc=makePeerConnection();
+    pc=await makePeerConnection();
     pc.addEventListener("track",event=>{
       if(!remoteAudio)return;
       remoteAudio.srcObject=event.streams?.[0]||new MediaStream([event.track]);
@@ -169,7 +169,7 @@ async function stopAllMedia(){await cleanupPublisher();await cleanupSubscriber()
 function closeRoom(){
   releaseTalk();
   if(roomHeartbeat){clearInterval(roomHeartbeat);roomHeartbeat=null;}
-  const old=socket;socket=null;room=null;
+  const old=socket;socket=null;room=null;roomConnectionKey=null;
   if(old){try{old.close();}catch{}}
   $("ptt").disabled=true;
   document.querySelectorAll("#roomGrid .room").forEach(x=>x.classList.remove("selected"));
@@ -191,7 +191,7 @@ function connectRoom(nextRoom,button){
   current.addEventListener("message",event=>{
     if(socket!==current)return;
     let data;try{data=JSON.parse(event.data)}catch{return}
-    if(data.type==="room:ready")setStatus("اتصال برقرار است · افراد حاضر: "+data.connected+" · ظرفیت اتاق: "+data.capacity);
+    if(data.type==="room:ready"){roomConnectionKey=data.connectionKey||null;setStatus("اتصال برقرار است · افراد حاضر: "+data.connected+" · ظرفیت اتاق: "+data.capacity);if(!roomConnectionKey){setStatus("شناسه امن اتصال دریافت نشد؛ دوباره وارد اتاق شوید.");closeRoom();}}
     if(data.type==="room:presence")setStatus("اعضای متصل این اتاق: "+data.connected);
     if(data.type==="ptt:granted"){
       activeSpeakerName=data.memberName||"گوینده";
@@ -218,8 +218,9 @@ function connectRoom(nextRoom,button){
   });
   current.addEventListener("close",()=>{
     if(socket!==current)return;
-    socket=null;room=null;holding=false;
+    socket=null;room=null;roomConnectionKey=null;holding=false;
     if(roomHeartbeat){clearInterval(roomHeartbeat);roomHeartbeat=null;}
+    if(heartbeat){clearInterval(heartbeat);heartbeat=null;}
     $("ptt").disabled=true;
     stopAllMedia();
     setStatus("ارتباط قطع شد؛ برای اتصال دوباره اتاق را انتخاب کنید.");
