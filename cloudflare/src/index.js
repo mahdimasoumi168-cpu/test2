@@ -443,6 +443,52 @@ async function handleApi(request, env) {
     } catch (error) { return json({ error: error.message }, 400); }
   }
 
+  const memberRoomsMatch = path.match(/^\/api\/admin\/members\/([^/]+)\/rooms$/);
+  if (memberRoomsMatch && (request.method === "GET" || request.method === "PUT")) {
+    if (user.role !== "admin") return json({ error: "دسترسی مدیر لازم است." }, 403);
+    const memberId = decodeURIComponent(memberRoomsMatch[1]);
+    const target = await env.DB.prepare("SELECT id, role FROM users WHERE id = ?").bind(memberId).first();
+    if (!target) return json({ error: "عضو پیدا نشد." }, 404);
+    if (target.role === "admin") return json({ error: "مدیر به همه اتاق‌ها دسترسی دارد و نیازی به تخصیص جداگانه ندارد." }, 409);
+
+    if (request.method === "GET") {
+      const rooms = await env.DB.prepare("SELECT id, name FROM rooms WHERE is_active = 1 AND id <> 'management' ORDER BY name").all();
+      const assigned = await env.DB.prepare("SELECT room_id FROM room_members WHERE user_id = ?").bind(memberId).all();
+      return json({
+        rooms: rooms.results || [],
+        assignedRoomIds: (assigned.results || []).map(row => row.room_id)
+      });
+    }
+
+    let body;
+    try { body = await request.json(); } catch { return json({ error: "فهرست اتاق‌ها معتبر نیست." }, 400); }
+    if (!Array.isArray(body.roomIds) || body.roomIds.length > 50 ||
+        body.roomIds.some(id => typeof id !== "string" || !validRoomId(id)) ||
+        new Set(body.roomIds).size !== body.roomIds.length ||
+        body.roomIds.includes("management")) {
+      return json({ error: "فهرست اتاق‌های انتخاب‌شده معتبر نیست." }, 400);
+    }
+    const requested = new Set(body.roomIds);
+    const allowedRooms = await env.DB.prepare("SELECT id FROM rooms WHERE is_active = 1 AND id <> 'management'").all();
+    const allowedIds = new Set((allowedRooms.results || []).map(row => row.id));
+    if ([...requested].some(id => !allowedIds.has(id))) return json({ error: "یک یا چند اتاق انتخاب‌شده وجود ندارد یا غیرفعال است." }, 400);
+
+    const previous = await env.DB.prepare("SELECT room_id FROM room_members WHERE user_id = ?").bind(memberId).all();
+    const previousIds = (previous.results || []).map(row => row.room_id);
+    const statements = [
+      env.DB.prepare("DELETE FROM room_members WHERE user_id = ?").bind(memberId),
+      ...[...requested].map(roomId =>
+        env.DB.prepare("INSERT INTO room_members (room_id, user_id) VALUES (?, ?)").bind(roomId, memberId)
+      )
+    ];
+    await env.DB.batch(statements);
+    for (const roomId of previousIds) {
+      if (!requested.has(roomId)) await env.ROOM_HUB.getByName(roomId).revokeUser(memberId);
+    }
+    await audit(env, user.id, "member.rooms.updated", memberId, { roomIds: [...requested] });
+    return json({ ok: true, roomIds: [...requested] });
+  }
+
   const memberPatch = path.match(/^\/api\/admin\/members\/([^/]+)$/);
   if (memberPatch && request.method === "PATCH") {
     if (user.role !== "admin") return json({ error: "دسترسی مدیر لازم است." }, 403);
