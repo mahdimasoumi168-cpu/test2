@@ -22,7 +22,7 @@ flutter test
 flutter run --dart-define=API_BASE_URL=https://test2.mahdi-masoumi168.workers.dev
 ```
 
-نشانی بالا فقط پس از استقرار Worker قابل استفاده است. در وضعیت فعلی Worker عمومی هنوز نسخه اجرایی API را ارائه نمی‌کند.
+Worker عمومی `test2` نسخه اجرایی API و رابط PWA را ارائه می‌کند. سلامت دیتابیس، SFU و TURN از مسیر `/api/health` گزارش می‌شود؛ پیش از استفاده، پاسخ آماده‌به‌کار این مسیر را بررسی کنید.
 
 ## حداقل نسخه سیستم‌عامل
 - Android: حداقل SDK 23.
@@ -42,4 +42,4 @@ flutter run --dart-define=API_BASE_URL=https://test2.mahdi-masoumi168.workers.de
 
 ## اعتبارسنجی خودکار
 
-Workflow با نام `Native mobile checks` در GitHub Actions، پوشه‌های بومی را تولید می‌کند، وابستگی‌ها را نصب می‌کند، `flutter analyze` و `flutter test` را اجرا می‌کند و سپس APK آزمایشی Android و برنامه unsigned برای iOS می‌سازد. موفقیت CI فقط ساخت‌پذیری را تأیید می‌کند؛ دریافت صدای واقعی، اعلان پس‌زمینه و مسیریابی Bluetooth باید روی گوشی فیزیکی آزمایش شوند.
+Workflow با نام `Native mobile checks` در GitHub Actions، پوشه‌های بومی را تولید می‌کند، وابستگی‌ها را نصب می‌کند، `flutter analyze` و `flutter test` را اجرا می‌کند و سپس APK آزمایشی Android و برنامه unsigned برای iOS می‌سازد. آخرین اجرای تأییدشده هر دو build موفق بوده است؛ APK آزمایشی و بسته unsigned iOS در Artifacts اجرای CI موجودند. این موفقیت فقط ساخت‌پذیری را تأیید می‌کند؛ دریافت صدای واقعی، اعلان پس‌زمینه و مسیریابی Bluetooth باید روی گوشی فیزیکی آزمایش شوند. نسخه iOS برای نصب نهایی به امضای معتبر Apple نیاز دارد.
