@@ -319,7 +319,20 @@ async function handleApi(request, env) {
   if (!allowedOrigin(request, env)) return json({ error: "مبدأ درخواست معتبر نیست." }, 403);
 
   if (path === "/api/health" && request.method === "GET") {
-    return json({ ok: true, service: "hamyar-heyat-cloudflare", voice: sfuConfigured(env) ? "configured" : "not-configured" });
+    try {
+      const rooms = await env.DB.prepare("SELECT COUNT(*) AS total FROM rooms WHERE is_active = 1").first();
+      const voiceReady = sfuConfigured(env);
+      return json({
+        ok: voiceReady,
+        service: "hamyar-heyat-cloudflare",
+        database: "ready",
+        activeRooms: Number(rooms?.total || 0),
+        voice: voiceReady ? "configured" : "not-configured",
+        turn: env.TURN_KEY_ID && env.TURN_KEY_SECRET ? "configured" : "stun-only"
+      }, voiceReady ? 200 : 503);
+    } catch {
+      return json({ ok: false, service: "hamyar-heyat-cloudflare", database: "unavailable" }, 503);
+    }
   }
 
   if (path === "/api/login" && request.method === "POST") {
