@@ -17,9 +17,9 @@ The production D1 database has six active rooms, each configured for 100 members
 
 Set these under **Workers & Pages → test2 → Settings → Variables and Secrets → Add → Secret**. Do not put secret values in GitHub or chat.
 
-- `SESSION_SECRET`: random 48-byte secret
-- `CODE_PEPPER`: a different random 48-byte secret
-- `BOOTSTRAP_ADMIN_KEY`: a different random 48-byte one-time setup key
+- `SESSION_SECRET`: already present on Worker `test2`; verify it remains configured
+- `CODE_PEPPER`: new random 48-byte secret
+- `BOOTSTRAP_ADMIN_KEY`: new random 48-byte one-time setup key
 - `TURN_KEY_SECRET`: secret returned when the `hamyar-heyat-turn` TURN key was created
 
 Existing `SFU_APP_ID` and `SFU_APP_SECRET` bindings must remain present. `TURN_KEY_ID` is a non-secret Worker variable in `wrangler.jsonc`.
