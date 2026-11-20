@@ -677,6 +677,38 @@ export class RoomHub extends DurableObject {
     return { userId: row.user_id, displayName: row.display_name, sessionId: row.session_id, connectionKey: row.connection_key, expiresAt: row.expires_at };
   }
 
+  async acquireSpeaker(userId, displayName, connectionKey) {
+    if (!userId || !displayName || !connectionKey) return { ok: false, speaker: await this.getSpeaker() };
+    const now = Date.now();
+    const claim = this.ctx.storage.sql.exec(
+      "INSERT INTO speaker (id, user_id, display_name, session_id, connection_key, expires_at) VALUES (1, ?, ?, NULL, ?, ?) ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id, display_name=excluded.display_name, session_id=CASE WHEN speaker.connection_key = excluded.connection_key THEN speaker.session_id ELSE NULL END, connection_key=excluded.connection_key, expires_at=excluded.expires_at WHERE speaker.expires_at <= ? OR speaker.connection_key = ? RETURNING user_id, display_name, session_id, connection_key, expires_at",
+      userId, displayName, connectionKey, now + PTT_LEASE_MS, now, connectionKey
+    ).toArray()[0];
+    if (!claim) return { ok: false, speaker: await this.getSpeaker() };
+    await this.ctx.storage.setAlarm(now + PTT_LEASE_MS);
+    return {
+      ok: true,
+      speaker: {
+        userId: claim.user_id,
+        displayName: claim.display_name,
+        sessionId: claim.session_id,
+        connectionKey: claim.connection_key,
+        expiresAt: claim.expires_at
+      }
+    };
+  }
+
+  async renewSpeaker(userId, connectionKey) {
+    const now = Date.now();
+    const renewed = this.ctx.storage.sql.exec(
+      "UPDATE speaker SET expires_at = ? WHERE id = 1 AND user_id = ? AND connection_key = ? AND expires_at > ? RETURNING expires_at",
+      now + PTT_LEASE_MS, userId, connectionKey, now
+    ).toArray()[0];
+    if (!renewed) return false;
+    await this.ctx.storage.setAlarm(renewed.expires_at);
+    return true;
+  }
+
   getPresence() {
     return this.ctx.getWebSockets().length;
   }
@@ -728,28 +760,20 @@ export class RoomHub extends DurableObject {
       if (now - (attachment.lastRequestAt || 0) < 350) return;
       attachment.lastRequestAt = now;
       socket.serializeAttachment(attachment);
-      const claim = this.ctx.storage.sql.exec(
-        "INSERT INTO speaker (id, user_id, display_name, session_id, connection_key, expires_at) VALUES (1, ?, ?, NULL, ?, ?) ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id, display_name=excluded.display_name, session_id=CASE WHEN speaker.connection_key = excluded.connection_key THEN speaker.session_id ELSE NULL END, connection_key=excluded.connection_key, expires_at=excluded.expires_at WHERE speaker.expires_at <= ? OR speaker.connection_key = ? RETURNING user_id, display_name, session_id, connection_key, expires_at",
-        attachment.userId, attachment.displayName, attachment.socketKey, now + PTT_LEASE_MS, now, attachment.socketKey
-      ).toArray()[0];
-      if (!claim) {
-        const current = await this.getSpeaker();
-        socket.send(JSON.stringify({ type: "ptt:busy", memberName: current?.displayName || "عضو دیگر" }));
+      const claim = await this.acquireSpeaker(attachment.userId, attachment.displayName, attachment.socketKey);
+      if (!claim.ok) {
+        socket.send(JSON.stringify({ type: "ptt:busy", memberName: claim.speaker?.displayName || "عضو دیگر" }));
         return;
       }
-      await this.ctx.storage.setAlarm(now + PTT_LEASE_MS);
       this.broadcast({ type: "ptt:granted", memberId: attachment.userId, memberName: attachment.displayName, maxTalkSeconds: PTT_LEASE_MS / 1000 });
       return;
     }
 
     if (message.type === "ptt:heartbeat") {
-      const current = await this.getSpeaker();
-      if (!current || current.userId !== attachment.userId || current.connectionKey !== attachment.socketKey || now - (attachment.lastHeartbeatAt || 0) < PTT_HEARTBEAT_MIN_INTERVAL_MS) return;
+      if (now - (attachment.lastHeartbeatAt || 0) < PTT_HEARTBEAT_MIN_INTERVAL_MS) return;
       attachment.lastHeartbeatAt = now;
       socket.serializeAttachment(attachment);
-      const expiresAt = now + PTT_LEASE_MS;
-      this.ctx.storage.sql.exec("UPDATE speaker SET expires_at = ? WHERE id = 1 AND user_id = ? AND connection_key = ?", expiresAt, attachment.userId, attachment.socketKey);
-      await this.ctx.storage.setAlarm(expiresAt);
+      await this.renewSpeaker(attachment.userId, attachment.socketKey);
       return;
     }
 
