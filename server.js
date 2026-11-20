@@ -387,8 +387,8 @@ app.post("/api/login", (req, res) => {
 
   const normalizedName = fullName.trim().normalize("NFC");
   const candidates = db.prepare(
-    "SELECT id, full_name, guardian_code_hash, person_code_hash, role, session_version FROM members WHERE active = 1"
-  ).all().filter(m => m.full_name.trim().normalize("NFC") === normalizedName);
+    "SELECT id, full_name, guardian_code_hash, person_code_hash, role, session_version FROM members WHERE active = 1 AND full_name = ?"
+  ).all(normalizedName);
 
   let member = null;
   for (const candidate of candidates) {
