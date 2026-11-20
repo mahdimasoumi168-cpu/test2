@@ -13,7 +13,7 @@
     "worker:preview": "wrangler preview --config wrangler.jsonc"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.12.0"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
