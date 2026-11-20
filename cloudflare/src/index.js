@@ -593,9 +593,13 @@ export class RoomHub extends DurableObject {
     if (!userId || !displayName || !role || !roomId) return new Response("Unauthorized", { status: 401 });
     if (this.ctx.getWebSockets().length >= capacity) return new Response("Room is full", { status: 429 });
     await this.ctx.storage.put("roomId", roomId);
+    const socketKey = crypto.randomUUID();
+    const globalPresence = this.env.GLOBAL_PRESENCE.getByName("global");
+    const registered = await globalPresence.register(socketKey, userId, roomId);
+    if (!registered) return new Response("سامانه به ظرفیت هم‌زمان ۱۰۰ نفر رسیده است.", { status: 429 });
     const pair = new WebSocketPair();
     const client = pair[0], server = pair[1];
-    server.serializeAttachment({ userId, displayName, role, lastRequestAt: 0, lastHeartbeatAt: 0 });
+    server.serializeAttachment({ userId, displayName, role, socketKey, lastRequestAt: 0, lastHeartbeatAt: 0 });
     this.ctx.acceptWebSocket(server);
     server.send(JSON.stringify({ type: "room:ready", capacity, connected: this.ctx.getWebSockets().length }));
     this.broadcast({ type: "room:presence", connected: this.ctx.getWebSockets().length }, server);
@@ -619,7 +623,7 @@ export class RoomHub extends DurableObject {
     let message;
     try { message = JSON.parse(raw); } catch { return; }
     const attachment = socket.deserializeAttachment();
-    if (!attachment || !["ptt:request", "ptt:release", "ptt:heartbeat", "ptt:published"].includes(message.type)) return;
+    if (!attachment || !["ptt:request", "ptt:release", "ptt:heartbeat", "ptt:published", "room:heartbeat"].includes(message.type)) return;
     const now = Date.now();
 
     if (message.type === "ptt:request") {
@@ -660,6 +664,10 @@ export class RoomHub extends DurableObject {
 
     if (message.type === "ptt:published") {
       await this.announcePublisher(attachment.userId, message.sessionId);
+      return;
+    }
+    if (message.type === "room:heartbeat") {
+      await this.env.GLOBAL_PRESENCE.getByName("global").touch(attachment.socketKey);
     }
   }
 
@@ -693,6 +701,7 @@ export class RoomHub extends DurableObject {
     for (const socket of this.ctx.getWebSockets()) {
       const attachment = socket.deserializeAttachment();
       if (attachment?.userId === userId) {
+        await this.env.GLOBAL_PRESENCE.getByName("global").unregister(attachment.socketKey);
         try { socket.send(JSON.stringify({ type: "session:revoked" })); } catch {}
         try { socket.close(4001, "Session revoked"); } catch {}
       }
@@ -711,6 +720,8 @@ export class RoomHub extends DurableObject {
     ).bind(roomId).all().catch(() => ({ results: [] }));
     for (const session of sessions.results || []) await closeSfuSession(this.env, session.id, session.mid);
     for (const socket of this.ctx.getWebSockets()) {
+      const attachment = socket.deserializeAttachment();
+      if (attachment?.socketKey) await this.env.GLOBAL_PRESENCE.getByName("global").unregister(attachment.socketKey);
       try { socket.send(JSON.stringify({ type: "room:disabled" })); } catch {}
       try { socket.close(4003, "Room disabled"); } catch {}
     }
@@ -719,6 +730,7 @@ export class RoomHub extends DurableObject {
   async webSocketClose(socket) {
     const attachment = socket.deserializeAttachment();
     if (attachment?.userId) {
+      await this.env.GLOBAL_PRESENCE.getByName("global").unregister(attachment.socketKey);
       await this.releaseSpeaker(attachment.userId);
       const sessions = await this.env.DB.prepare(
         "SELECT id, mid FROM sfu_sessions WHERE user_id = ? AND room_id = ? AND status <> 'closed'"
@@ -730,7 +742,10 @@ export class RoomHub extends DurableObject {
 
   async webSocketError(socket) {
     const attachment = socket.deserializeAttachment();
-    if (attachment?.userId) await this.releaseSpeaker(attachment.userId);
+    if (attachment?.userId) {
+      await this.env.GLOBAL_PRESENCE.getByName("global").unregister(attachment.socketKey);
+      await this.releaseSpeaker(attachment.userId);
+    }
   }
 
   async alarm() {
@@ -747,7 +762,7 @@ export class RoomHub extends DurableObject {
 export default {
   async fetch(request, env) {
     try {
-      if (!env.DB || !env.ROOM_HUB) return json({ error: "اتصال پایگاه داده یا اتاق‌ها تنظیم نشده است." }, 503);
+      if (!env.DB || !env.ROOM_HUB || !env.GLOBAL_PRESENCE) return json({ error: "اتصال پایگاه داده یا اتاق‌ها تنظیم نشده است." }, 503);
       if (request.method === "OPTIONS") return new Response(null, { status: 204 });
       const response = await handleApi(request, env);
       if (response) return response;
