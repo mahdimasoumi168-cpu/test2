@@ -89,7 +89,7 @@ async function closeSession(sessionId){
 }
 async function cleanupPublisher(){
   const active=publisher;publisher=null;
-  if(!active)return;
+  if(!active){try{await window.HamyarAudio?.cancelPreparedContext?.();}catch{}return;}
   try{active.pc.onconnectionstatechange=null;active.pc.close();}catch{}
   try{await active.microphone.close();}catch{}
   await closeSession(active.sessionId);
@@ -120,7 +120,7 @@ async function startPublisher(){
       parameters.encodings=parameters.encodings?.length?parameters.encodings:[{}];
       parameters.encodings[0].maxBitrate=20000;
       await sender.setParameters(parameters);
-    }catch{}
+    }catch{throw new Error("این دستگاه امکان اعمال سقف امن کیفیت صوت را ندارد؛ برای جلوگیری از مصرف کنترل‌نشده، انتشار صدا متوقف شد.");}
     const offer=await pc.createOffer();
     await pc.setLocalDescription(offer);
     await waitIceGatheringComplete(pc);
@@ -238,11 +238,13 @@ function connectRoom(nextRoom,button){
       else setStatus("صدای شما برای اعضای اتاق ارسال می‌شود.");
     }
     if(data.type==="ptt:busy")setStatus(data.memberName?"اکنون "+data.memberName+" در حال صحبت است.":"فرد دیگری در حال صحبت است.");
+    if(data.type==="ptt:budget-blocked"){setStatus("سقف ایمن مصرف ماهانه صوت نزدیک شده است؛ شروع صحبت موقتاً متوقف شد.");releaseTalk();}
     if(data.type==="ptt:publish-rejected"){setStatus("مجوز انتشار صدا معتبر نماند؛ کانال آزاد شد.");releaseTalk();}
     if(data.type==="ptt:released"){
       activeSpeakerName="";
       cleanupSubscriber();
-      if(data.memberId===member.id||publisher)cleanupPublisher();
+      if(data.memberId===member.id)releaseTalk();
+      else if(publisher)cleanupPublisher();
       setStatus("کانال آزاد شد.");
     }
     if(data.type==="room:disabled"){closeRoom();loadRooms();setStatus("این اتاق توسط مدیر غیرفعال شد.");}
@@ -271,6 +273,7 @@ let heartbeat=null;
 function request(){
   if(!room||!isSocketOpen()||holding)return;
   holding=true;talkGeneration++;
+  try{window.HamyarAudio?.prepareAudioContext?.().catch(()=>{});}catch{}
   sendSocket("ptt:request");
   heartbeat=setInterval(()=>{if(holding&&isSocketOpen())sendSocket("ptt:heartbeat");},10000);
 }
