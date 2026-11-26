@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>اتاق فرمان تصویری OBS</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden}body{font:13px Tahoma,"Segoe UI",Arial,sans-serif;background:#0b1421;color:#edf4ff}
+header{height:54px;padding:7px 12px;background:#17263b;border-bottom:1px solid #354a65;display:flex;align-items:center;gap:12px}
+h1{font-size:16px;color:#9bd2ff;margin:0;white-space:nowrap}.connect{display:flex;gap:6px;flex:1}input{min-width:90px;max-width:240px;flex:1;background:#0c1727;color:#fff;border:1px solid #405879;border-radius:6px;padding:7px;font:inherit}
+button{background:#29496d;color:white;border:1px solid #52769e;border-radius:6px;padding:7px 10px;cursor:pointer;font:inherit;font-size:11px;white-space:nowrap}button:hover{background:#38699a}button:disabled{opacity:.45;cursor:not-allowed}
+#status{font-size:11px;color:#ffd27a;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#status.ok{color:#9ef0b2}#status.err{color:#ffaaaa}
+main{height:calc(100vh - 54px);padding:8px;display:grid;grid-template-columns:minmax(250px,30%) minmax(0,70%);gap:8px}
+.panel{min-width:0;min-height:0;background:#142238;border:1px solid #304763;border-radius:8px;padding:8px;overflow:auto}
+h2{font-size:13px;color:#a9d9ff;margin:0 0 7px}
+.program{background:#09111d;border:1px solid #3977a9;border-radius:7px;padding:7px;margin-bottom:8px}
+.programhead{display:flex;justify-content:space-between;align-items:center;color:#b8e0ff;font-weight:bold;font-size:12px;margin-bottom:6px}
+#program{width:100%;aspect-ratio:16/9;background:#03070d;display:flex;align-items:center;justify-content:center;color:#a9bad0;border-radius:5px;overflow:hidden}
+#program img{width:100%;height:100%;object-fit:contain}
+#programText{font-size:10px;color:#aebfd2;margin-top:5px}
+.help{font-size:10px;line-height:1.7;color:#aebfd2}
+.scene{border:1px solid #344b69;border-radius:7px;margin:0 0 8px;overflow:hidden}
+.scenehead{display:flex;align-items:center;justify-content:space-between;gap:6px;background:#20334c;padding:6px 8px}
+.scenehead strong{font-size:12px;color:#c5e5ff;overflow-wrap:anywhere}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px;padding:8px}
+.card{background:#203149;border:1px solid #3a506c;border-radius:6px;overflow:hidden;min-width:0}
+.card.selected{border:2px solid #40b5ff}
+.thumb{width:100%;aspect-ratio:16/9;background:#080f19;display:flex;align-items:center;justify-content:center;color:#92a8c1;font-size:10px;overflow:hidden}
+.thumb img{width:100%;height:100%;object-fit:contain}
+.info{padding:7px}.name{font-size:11px;font-weight:bold;line-height:1.5;overflow-wrap:anywhere}.state{font-size:9px;color:#a9bfd8;margin-top:2px}
+.actions{display:flex;gap:5px;margin-top:7px}.actions button{flex:1;padding:7px 3px;font-size:10px}.choose{background:#28547c}.live{background:#17633c;border-color:#2d9662}
+@media(max-width:760px){html,body{height:auto;overflow:auto}header{height:auto;flex-wrap:wrap}main{height:auto;display:flex;flex-direction:column}.panel{overflow:visible}.cards{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}}
+</style></head>
+<body>
+<header><h1>اتاق فرمان OBS</h1><div class="connect"><input id="password" type="password" placeholder="رمز WebSocket"><button id="connect">اتصال</button><button id="refresh" disabled>بروزرسانی</button></div><div id="status">آماده اتصال • پورت 4455</div></header>
+<main>
+<section class="panel">
+ <div class="program"><div class="programhead"><span>خروجی اصلی در حال پخش (PROGRAM)</span><span>● LIVE</span></div><div id="program">پس از اتصال، خروجی Program نمایش داده می‌شود.</div><div id="programText">تصویر ترکیبی صحنه Program؛ عکس به‌روزشونده از خروجی اصلی OBS.</div></div>
+ <h2>راهنمای عملیات</h2><div class="help">۱. «انتخاب منبع» فقط همان منبع را در صحنه خودش روشن و بقیه منابع همان صحنه را خاموش می‌کند.<br>۲. «انتقال به لایو» همان انتخاب را به خروجی اصلی Program می‌فرستد.<br>تصویر Program هر ۱ ثانیه تازه می‌شود؛ WebSocket تصویر پیوسته ویدئویی ارائه نمی‌کند، بنابراین این بخش به‌روزرسانی سریع عکس است.</div>
+ <div id="selection" class="help" style="margin-top:10px">منبعی انتخاب نشده است.</div>
+</section>
+<section class="panel"><h2>تمام صحنه‌ها و منابع</h2><div id="scenes" class="help">هنوز متصل نشده‌اید.</div></section>
+</main>
+<script>
+(()=>{'use strict';
+const $=id=>document.getElementById(id);let ws=null,seq=1,pending=new Map(),scenes=[],selected=null,busy=false,programBusy=false,programTimer=null,thumbTimer=null;
+function status(t,k=''){$('status').textContent=t;$('status').className=k}
+function request(type,data={},timeout=7000){return new Promise((resolve,reject)=>{if(!ws||ws.readyState!==1)return reject(Error('اتصال برقرار نیست'));const id=String(seq++),timer=setTimeout(()=>{pending.delete(id);reject(Error('پاسخ OBS دریافت نشد: '+type))},timeout);pending.set(id,{resolve,reject,timer});ws.send(JSON.stringify({op:6,d:{requestType:type,requestId:id,requestData:data}}))})}
+async function hash(v){if(!crypto.subtle)throw Error('رمزنگاری مرورگر در دسترس نیست');const d=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v));let b='';new Uint8Array(d).forEach(x=>b+=String.fromCharCode(x));return btoa(b)}
+function connect(){if(ws)ws.close();status('در حال اتصال به OBS...');ws=new WebSocket('ws://127.0.0.1:4455');ws.onopen=()=>status('ارتباط برقرار شد؛ در انتظار OBS...');ws.onmessage=async ev=>{let m;try{m=JSON.parse(ev.data)}catch{return}
+if(m.op===0){try{let authentication;if(m.d.authentication){const a=m.d.authentication;authentication=await hash(await hash($('password').value+a.salt)+a.challenge)}ws.send(JSON.stringify({op:1,d:{rpcVersion:1,...(authentication?{authentication}:{})}}))}catch(e){status('خطای احراز هویت: '+e.message,'err')}}
+else if(m.op===2){$('refresh').disabled=false;await loadAll();clearInterval(programTimer);clearInterval(thumbTimer);programTimer=setInterval(updateProgram,1000);thumbTimer=setInterval(updateThumbs,6000)}
+else if(m.op===7&&m.d){const p=pending.get(m.d.requestId);if(!p)return;clearTimeout(p.timer);pending.delete(m.d.requestId);m.d.requestStatus?.result?p.resolve(m.d.responseData||{}):p.reject(Error(m.d.requestStatus?.comment||'درخواست ناموفق'))}
+else if(m.op===5&&m.d&&/Scene|Input|Source/.test(m.d.eventType||''))loadAll()};
+ws.onerror=()=>status('خطای اتصال؛ WebSocket و پورت 4455 را بررسی کنید.','err');ws.onclose=()=>{clearInterval(programTimer);clearInterval(thumbTimer);$('refresh').disabled=true;status('اتصال قطع شد.','err')}}
+function el(t,c,txt){const x=document.createElement(t);if(c)x.className=c;if(txt!==undefined)x.textContent=txt;return x}
+async function loadAll(){if(busy||!ws||ws.readyState!==1)return;busy=true;try{const r=await request('GetSceneList');scenes=r.scenes||[];for(const s of scenes){const z=await request('GetSceneItemList',{sceneName:s.sceneName});s.items=z.sceneItems||[]}render();status('متصل • '+scenes.length+' صحنه و '+scenes.reduce((n,s)=>n+s.items.length,0)+' منبع','ok');await updateProgram();await updateThumbs()}catch(e){status('خطا: '+e.message,'err')}finally{busy=false}}
+function render(){const root=$('scenes');root.replaceChildren();if(!scenes.length){root.textContent='صحنه‌ای پیدا نشد.';return}scenes.forEach(s=>{const box=el('div','scene'),head=el('div','scenehead'),title=el('strong','',s.sceneName),go=el('button','','رفتن به صحنه');go.onclick=()=>request('SetCurrentProgramScene',{sceneName:s.sceneName}).then(updateProgram).then(()=>status('صحنه به Program منتقل شد.','ok')).catch(e=>status(e.message,'err'));head.append(title,go);box.append(head);const grid=el('div','cards');s.items.forEach(item=>{const card=el('div','card'+(selected&&selected.scene===s.sceneName&&selected.id===item.sceneItemId?' selected':'')),thumb=el('div','thumb','در حال دریافت تصویر...'),info=el('div','info'),name=el('div','name',item.sourceName),state=el('div','state',item.sceneItemEnabled?'روشن':'خاموش'),actions=el('div','actions'),pick=el('button','choose','انتخاب منبع'),take=el('button','live','انتقال به لایو');thumb.id='thumb_'+safe(s.sceneName,item.sceneItemId);pick.onclick=()=>prepare(s.sceneName,item);take.onclick=()=>transfer(s.sceneName,item);actions.append(pick,take);info.append(name,state,actions);card.append(thumb,info);grid.append(card)});if(!s.items.length)grid.append(el('div','help','این صحنه منبعی ندارد.'));box.append(grid);root.append(box)})}
+function safe(a,b){return btoa(unescape(encodeURIComponent(a+'_'+b))).replace(/[^a-zA-Z0-9]/g,'').slice(0,40)}
+async function shot(name,w,h){return request('GetSourceScreenshot',{sourceName:name,imageFormat:'jpg',imageWidth:w,imageHeight:h},6000)}
+async function updateProgram(){if(programBusy||!ws||ws.readyState!==1)return;programBusy=true;try{const cur=await request('GetCurrentProgramScene');const name=cur.currentProgramSceneName;if(!name)throw Error('صحنه Program پیدا نشد');const r=await shot(name,1280,720);if(!r.imageData)throw Error('تصویر Program دریافت نشد');const img=document.createElement('img');img.src=r.imageData;img.alt='خروجی Program';$('program').replaceChildren(img);$('programText').textContent='خروجی اصلی OBS • صحنه Program: '+name+' • تازه‌سازی خودکار هر ۱ ثانیه'}catch(e){$('programText').textContent='خطای تصویر خروجی اصلی: '+e.message}finally{programBusy=false}}
+async function updateThumbs(){if(!ws||ws.readyState!==1)return;for(const s of scenes)for(const item of s.items){const target=$('thumb_'+safe(s.sceneName,item.sceneItemId));if(!target)continue;try{const r=await shot(item.sourceName,480,270);if(r.imageData){const img=document.createElement('img');img.src=r.imageData;img.alt=item.sourceName;target.replaceChildren(img)}}catch{target.textContent='پیش‌نمایش این منبع در دسترس نیست'}}}
+async function prepare(scene,item){try{status('در حال آماده‌سازی منبع...');for(const other of sceneItems(scene)){const on=other.sceneItemId===item.sceneItemId;await request('SetSceneItemEnabled',{sceneName:scene,sceneItemId:other.sceneItemId,sceneItemEnabled:on});other.sceneItemEnabled=on}selected={scene,id:item.sceneItemId};$('selection').textContent='انتخاب‌شده: '+item.sourceName+' | صحنه: '+scene;render();status('منبع آماده شد؛ اکنون انتقال به لایو را بزنید.','ok')}catch(e){status('خطای انتخاب: '+e.message,'err')}}
+function sceneItems(name){return (scenes.find(s=>s.sceneName===name)||{items:[]}).items}
+async function transfer(scene,item){try{await prepare(scene,item);await request('SetCurrentProgramScene',{sceneName:scene});await updateProgram();status('صحنه و منبع انتخاب‌شده به خروجی اصلی منتقل شد.','ok')}catch(e){status('خطای انتقال: '+e.message,'err')}}
+$('connect').addEventListener('click',connect);$('refresh').addEventListener('click',loadAll);
+})();
+</script></body></html>
