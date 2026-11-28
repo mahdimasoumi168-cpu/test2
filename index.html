@@ -647,30 +647,23 @@ try{
 
 status("در حال آماده‌سازی...");
 
-const s=scenes.find(x=>x.sceneName===scene);
-
-for(const it of s.items){
-
-const enabled=it.sceneItemId===item.sceneItemId;
-
 await req("SetSceneItemEnabled",{
 sceneName:scene,
-sceneItemId:it.sceneItemId,
-sceneItemEnabled:enabled
+sceneItemId:item.sceneItemId,
+sceneItemEnabled:true
 });
 
-it.sceneItemEnabled=enabled;
-
-}
-
+item.sceneItemEnabled=true;
 selected={scene:scene,id:item.sceneItemId};
 
 render();
 
-status("آماده شد؛ اکنون انتقال به لایو را بزنید.","ok");
+status("منبع آماده شد؛ سایر لایه‌های صحنه حفظ شدند.","ok");
+return true;
 
 }catch(e){
 status("خطای آماده‌سازی: "+e.message,"err");
+return false;
 }
 }
 
@@ -679,7 +672,8 @@ async function goLive(scene,item){
 
 try{
 
-await prepare(scene,item);
+const prepared=await prepare(scene,item);
+if(!prepared)throw Error("آماده‌سازی منبع ناموفق بود");
 
 const studio=await req("GetStudioModeEnabled");
 
