@@ -478,6 +478,7 @@ await updateThumbs();
 status("خطای دریافت صحنه‌ها: "+e.message,"err");
 }
 }
+window.refreshOBSScenes=loadScenes;
 
 function currentScene(){
 return scenes.find(s=>s.sceneName===$("sceneSelect").value)||scenes[0];
