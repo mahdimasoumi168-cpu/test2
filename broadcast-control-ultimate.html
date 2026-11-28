@@ -1,0 +1,770 @@
+
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>اتاق فرمان هیئت صاحب‌الزمان (عج)</title>
+
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;font-family:Tahoma,Arial,sans-serif}
+body{background:#0b1421;color:#f2f6fc}
+button,input{font-family:inherit}
+button{cursor:pointer;border:0;border-radius:8px;padding:11px 15px;color:white;background:#285b87}
+button:disabled{opacity:.4;cursor:not-allowed}
+input{background:#101d30;color:white;border:1px solid #506783;border-radius:8px;padding:13px;width:100%;font-size:15px;outline:none}
+input:focus{border-color:#45a9ee}
+
+/* LOGIN */
+#loginPage{
+height:100%;
+display:flex;
+justify-content:center;
+align-items:center;
+padding:20px;
+background:radial-gradient(circle at top,#203d5e,#0b1421 65%);
+}
+.loginBox{
+width:100%;
+max-width:390px;
+padding:30px;
+text-align:center;
+background:#17263b;
+border:1px solid #405875;
+border-radius:17px;
+box-shadow:0 15px 45px #0007;
+}
+.loginLogo{
+width:105px;height:105px;
+object-fit:contain;
+background:white;
+padding:5px;
+border-radius:50%;
+margin-bottom:17px;
+}
+.loginBox h1{font-size:22px;margin:5px 0 8px}
+.loginBox p{font-size:13px;color:#b9cce0;margin:0 0 25px}
+.loginBox input{text-align:center;margin-bottom:12px}
+.loginBox button{width:100%;font-size:15px;font-weight:bold}
+#error{color:#ff9999;font-size:12px;min-height:22px;margin-top:12px}
+
+/* CONTROL ROOM */
+#controlPage{display:none;height:100%;overflow:hidden}
+header{
+height:62px;background:#17263b;
+display:flex;align-items:center;
+padding:7px 13px;gap:12px;
+border-bottom:1px solid #3b526d;
+}
+.headerLogo{width:45px;height:45px;object-fit:contain;background:white;border-radius:50%;padding:2px}
+.brand{flex:1}
+.brand b{font-size:18px}
+.brand small{display:block;color:#b9cce0;font-size:11px;margin-top:4px}
+#status{font-size:12px;color:#ffd27a}
+#status.ok{color:#9ef0b2}
+#status.err{color:#ff9999}
+
+main{
+height:calc(100% - 62px);
+padding:9px;
+display:grid;
+grid-template-columns:29% 71%;
+gap:9px;
+}
+.panel{
+background:#142238;border:1px solid #344c69;
+border-radius:9px;padding:9px;
+min-width:0;min-height:0;overflow:hidden;
+}
+h2{font-size:15px;color:#c3e5ff;margin:0 0 9px}
+.program{
+background:#050b13;border:2px solid #3984b8;
+border-radius:8px;padding:8px;
+}
+.programTitle{
+display:flex;justify-content:space-between;
+font-size:14px;font-weight:bold;margin-bottom:7px;
+}
+#program{
+width:100%;aspect-ratio:16/9;
+background:#02060b;
+display:flex;align-items:center;justify-content:center;
+overflow:hidden;color:#9fb3c9;font-size:12px;
+}
+#program img{width:100%;height:100%;object-fit:contain}
+#programInfo{font-size:11px;color:#b9cde1;margin-top:7px}
+.guide{font-size:12px;color:#c2d2e3;line-height:2;margin-top:12px}
+
+.topline{
+display:flex;align-items:center;
+justify-content:space-between;gap:8px;margin-bottom:8px;
+}
+select{
+background:#101d30;color:white;
+border:1px solid #506783;border-radius:7px;
+padding:9px;font-family:Tahoma;max-width:48%;
+}
+.board{
+height:calc(100% - 38px);
+display:grid;
+grid-template-columns:1fr 1fr;
+grid-template-rows:1fr 1fr .72fr;
+gap:8px;
+}
+.source{
+background:#203149;border:1px solid #48617e;
+border-radius:8px;overflow:hidden;
+display:flex;flex-direction:column;min-height:0;
+}
+.source.active{border:2px solid #31a8f4}
+.source:nth-child(1){grid-column:1;grid-row:1}
+.source:nth-child(2){grid-column:2;grid-row:1}
+.source:nth-child(3){grid-column:2;grid-row:2}
+.source:nth-child(4){grid-column:1;grid-row:2}
+.source:nth-child(5){
+grid-column:1/3;grid-row:3;
+width:48%;justify-self:center;
+}
+.preview{
+flex:1;min-height:0;background:#070d16;
+display:flex;align-items:center;justify-content:center;
+overflow:hidden;color:#aebfd1;font-size:12px;
+}
+.preview img{width:100%;height:100%;object-fit:contain}
+.details{padding:7px}
+.sourceTitle{font-size:13px;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.number{color:#7fd0ff;margin-left:5px;font-size:16px}
+.sourceState{font-size:10px;color:#b7c9dc;margin-top:3px}
+.actions{display:flex;gap:6px;margin-top:6px}
+.actions button{flex:1;padding:8px 3px;font-size:11px}
+.prepare{background:#285b87}
+.goLive{background:#17643e}
+
+@media(max-width:800px){
+html,body{height:auto;overflow:auto}
+#controlPage{height:auto;overflow:visible}
+header{height:auto;flex-wrap:wrap}
+main{height:auto;display:flex;flex-direction:column}
+.panel{overflow:visible}
+.board{height:auto;grid-template-rows:220px 220px 170px}
+}
+</style>
+</head>
+
+<body>
+
+<!-- PAGE 1: LOGIN -->
+<section id="loginPage">
+<div class="loginBox">
+
+<img class="loginLogo"
+src="https://raw.githubusercontent.com/mahdimasoumi168-cpu/test2/main/Monochrome%20Mosque%20Calligraphy%20Emblem.png"
+alt="لوگوی هیئت">
+
+<h1>هیئت صاحب‌الزمان (عج)</h1>
+<p>سامانه مدیریت و کنترل پخش زنده</p>
+
+<form id="loginForm">
+<input id="loginPassword"
+type="password"
+placeholder="رمز ورود اتاق فرمان"
+autocomplete="current-password"
+required>
+<input id="obsPassword" type="password" placeholder="رمز اتصال OBS (WebSocket)" autocomplete="off" required>
+<button type="submit">ورود به اتاق فرمان</button>
+</form>
+
+<div id="error"></div>
+</div>
+</section>
+
+<!-- PAGE 2: CONTROL ROOM -->
+<section id="controlPage">
+
+<header>
+<img class="headerLogo"
+src="https://raw.githubusercontent.com/mahdimasoumi168-cpu/test2/main/Monochrome%20Mosque%20Calligraphy%20Emblem.png">
+
+<div class="brand">
+<b>هیئت صاحب‌الزمان (عج)</b>
+<small>اتاق فرمان پخش زنده</small>
+</div>
+
+<div id="status">آماده اتصال</div>
+<button id="logout">خروج</button>
+</header>
+
+<main>
+
+<section class="panel">
+
+<h2>خروجی اصلی در حال پخش ـ PROGRAM</h2>
+
+<div class="program">
+<div class="programTitle">
+<span>تصویر روی آنتن</span>
+<span id="liveScene">LIVE</span>
+</div>
+
+<div id="program">
+خروجی اصلی پس از اتصال نمایش داده می‌شود.
+</div>
+
+<div id="programInfo">انتظار برای اتصال به OBS</div>
+</div>
+
+<div class="guide">
+۱. صحنه موردنظر را انتخاب کن.
+
+۲. دکمه آماده‌سازی را بزن.
+
+۳. پس از بررسی، انتقال به لایو را بزن.
+
+۴. تصویر اصلی خروجی به‌روزرسانی می‌شود.
+</div>
+
+</section>
+
+<section class="panel">
+
+<div class="topline">
+<h2>منابع تصویری</h2>
+<select id="sceneSelect" disabled>
+<option>در انتظار اتصال</option>
+</select>
+</div>
+
+<div class="board" id="board"></div>
+
+</section>
+
+</main>
+</section>
+
+<script>
+"use strict";
+
+/* تنظیمات ورود */
+const LOGIN_PASSWORD="123456";
+
+/* OBS */
+let ws=null;
+let seq=1;
+let pending=new Map();
+let scenes=[];
+let selected=null;
+let programBusy=false;
+let thumbBusy=false;
+let programTimer=null;
+let thumbTimer=null;
+
+const $=id=>document.getElementById(id);
+
+function status(t,k=""){
+$("status").textContent=t;
+$("status").className=k;
+}
+
+/* LOGIN */
+$("loginForm").addEventListener("submit",e=>{
+e.preventDefault();
+
+if($("loginPassword").value!==LOGIN_PASSWORD){
+$("error").textContent="رمز عبور اشتباه است.";
+$("loginPassword").value="";
+$("loginPassword").focus();
+return;
+}
+
+sessionStorage.setItem("controlAuthenticated","1");
+sessionStorage.setItem("obsPassword",$("obsPassword").value);
+
+$("loginPage").style.display="none";
+$("controlPage").style.display="block";
+
+connectOBS();
+});
+
+function logout(){
+sessionStorage.removeItem("controlAuthenticated");
+sessionStorage.removeItem("obsPassword");
+if(ws)ws.close();
+clearInterval(programTimer);
+clearInterval(thumbTimer);
+$("controlPage").style.display="none";
+$("loginPage").style.display="flex";
+$("loginPassword").value="";
+$("obsPassword").value="";
+$("error").textContent="";
+}
+
+$("logout").onclick=logout;
+
+/* HASH */
+async function digest(s){
+const a=await crypto.subtle.digest(
+"SHA-256",
+new TextEncoder().encode(s)
+);
+let b="";
+new Uint8Array(a).forEach(x=>b+=String.fromCharCode(x));
+return btoa(b);
+}
+
+/* OBS REQUEST */
+function req(type,data={},timeout=8000){
+return new Promise((resolve,reject)=>{
+
+if(!ws||ws.readyState!==1)
+return reject(Error("اتصال OBS برقرار نیست"));
+
+const id=String(seq++);
+
+const timer=setTimeout(()=>{
+pending.delete(id);
+reject(Error("پاسخ OBS دریافت نشد: "+type));
+},timeout);
+
+pending.set(id,{resolve,reject,timer});
+
+ws.send(JSON.stringify({
+op:6,
+d:{
+requestType:type,
+requestId:id,
+requestData:data
+}
+}));
+});
+}
+window.req=req;
+
+/* CONNECT */
+function connectOBS(){
+
+status("در حال اتصال...");
+
+ws=new WebSocket("ws://127.0.0.1:4455");
+window.ws=ws;
+
+ws.onopen=()=>status("اتصال برقرار شد");
+
+ws.onmessage=async e=>{
+
+let m;
+try{m=JSON.parse(e.data)}catch{return}
+
+if(m.op===0){
+
+try{
+
+let authentication;
+
+if(m.d.authentication){
+
+const a=m.d.authentication;
+
+authentication=await digest(
+await digest($("obsPassword").value+a.salt)+a.challenge
+);
+
+}
+
+ws.send(JSON.stringify({
+op:1,
+d:{
+rpcVersion:1,
+eventSubscriptions:131071,
+...(authentication?{authentication}:{})
+}
+}));
+
+}catch(err){
+status("خطای ورود OBS","err");
+}
+
+}
+
+else if(m.op===2){
+
+await loadScenes();
+window.dispatchEvent(new Event("obs-ready"));
+
+clearInterval(programTimer);
+clearInterval(thumbTimer);
+
+programTimer=setInterval(updateProgram,1200);
+thumbTimer=setInterval(updateThumbs,4000);
+
+}
+
+else if(m.op===5&&m.d){
+window.dispatchEvent(new CustomEvent("obs-event",{detail:m.d}));
+}
+
+else if(m.op===7&&m.d){
+
+const p=pending.get(m.d.requestId);
+
+if(p){
+
+clearTimeout(p.timer);
+pending.delete(m.d.requestId);
+
+if(m.d.requestStatus?.result){
+p.resolve(m.d.responseData||{});
+}else{
+p.reject(Error(m.d.requestStatus?.comment||"خطا"));
+}
+
+}
+
+}
+
+};
+
+ws.onerror=()=>status("خطای اتصال OBS","err");
+
+ws.onclose=()=>{
+clearInterval(programTimer);
+clearInterval(thumbTimer);
+status("ارتباط OBS قطع شد","err");
+};
+}
+
+/* LOAD SCENES */
+async function loadScenes(){
+
+try{
+
+const r=await req("GetSceneList");
+scenes=r.scenes||[];
+window.scenes=scenes;
+
+for(const s of scenes){
+
+const x=await req("GetSceneItemList",{
+sceneName:s.sceneName
+});
+
+s.items=x.sceneItems||[];
+
+}
+
+const p=await req("GetCurrentProgramScene");
+
+const sel=$("sceneSelect");
+sel.replaceChildren();
+
+scenes.forEach(s=>{
+const o=document.createElement("option");
+o.value=s.sceneName;
+o.textContent=s.sceneName;
+sel.append(o);
+});
+
+sel.value=p.currentProgramSceneName||"";
+sel.disabled=false;
+
+render();
+
+status("اتصال موفق • "+scenes.length+" صحنه","ok");
+
+await updateProgram();
+await updateThumbs();
+
+}catch(e){
+status("خطای دریافت صحنه‌ها: "+e.message,"err");
+}
+}
+window.refreshOBSScenes=loadScenes;
+
+function currentScene(){
+return scenes.find(s=>s.sceneName===$("sceneSelect").value)||scenes[0];
+}
+
+/* RENDER FIVE SOURCES */
+function render(){
+
+const root=$("board");
+root.replaceChildren();
+
+const s=currentScene();
+if(!s)return;
+
+for(let i=0;i<5;i++){
+
+const item=s.items[i];
+
+const card=document.createElement("div");
+card.className="source";
+
+if(!item){
+const empty=document.createElement("div");
+empty.className="preview";
+empty.textContent="منبع شماره "+(i+1);
+card.append(empty);
+root.append(card);
+continue;
+}
+
+if(selected&&selected.id===item.sceneItemId&&selected.scene===s.sceneName)
+card.classList.add("active");
+
+const preview=document.createElement("div");
+preview.className="preview";
+preview.id="thumb"+i;
+preview.textContent="در حال دریافت تصویر";
+
+const details=document.createElement("div");
+details.className="details";
+
+const title=document.createElement("div");
+title.className="sourceTitle";
+
+const number=document.createElement("span");
+number.className="number";
+number.textContent=(i+1)+" ـ ";
+
+title.append(number,document.createTextNode(item.sourceName));
+
+const state=document.createElement("div");
+state.className="sourceState";
+state.textContent=item.sceneItemEnabled?"روشن":"خاموش";
+
+const actions=document.createElement("div");
+actions.className="actions";
+
+const prep=document.createElement("button");
+prep.className="prepare";
+prep.textContent="آماده‌سازی";
+prep.onclick=()=>prepare(s.sceneName,item);
+
+const live=document.createElement("button");
+live.className="goLive";
+live.textContent="انتقال به لایو";
+live.onclick=()=>goLive(s.sceneName,item);
+
+actions.append(prep,live);
+details.append(title,state,actions);
+card.append(preview,details);
+root.append(card);
+
+}
+}
+
+$("sceneSelect").onchange=()=>{
+selected=null;
+render();
+updateThumbs();
+};
+
+/* SCREENSHOT */
+async function screenshot(sourceName){
+return req("GetSourceScreenshot",{
+sourceName:sourceName,
+imageFormat:"jpg",
+imageWidth:1280,
+imageHeight:720
+},7000);
+}
+
+/* PROGRAM */
+async function updateProgram(){
+
+if(programBusy||!ws||ws.readyState!==1)return;
+
+programBusy=true;
+
+try{
+
+const p=await req("GetCurrentProgramScene");
+const name=p.currentProgramSceneName;
+
+if(!name)throw Error("نام صحنه Program دریافت نشد");
+
+const r=await screenshot(name);
+
+if(!r.imageData)throw Error("تصویر خالی است");
+
+const img=document.createElement("img");
+img.src=r.imageData;
+img.alt="Program";
+
+$("program").replaceChildren(img);
+$("liveScene").textContent="LIVE • "+name;
+$("programInfo").textContent="صحنه Program: "+name;
+
+}catch(e){
+$("programInfo").textContent="خطای تصویر: "+e.message;
+}finally{
+programBusy=false;
+}
+}
+
+/* THUMBNAILS */
+async function updateThumbs(){
+
+if(thumbBusy||!ws||ws.readyState!==1)return;
+
+thumbBusy=true;
+
+try{
+
+const s=currentScene();
+if(!s)return;
+
+for(let i=0;i<Math.min(5,s.items.length);i++){
+
+const el=$("thumb"+i);
+if(!el)continue;
+
+try{
+
+const r=await screenshot(s.items[i].sourceName);
+
+if(r.imageData){
+const img=document.createElement("img");
+img.src=r.imageData;
+el.replaceChildren(img);
+}
+
+}catch(e){
+el.textContent="تصویر در دسترس نیست";
+}
+
+}
+
+}finally{
+thumbBusy=false;
+}
+}
+
+/* PREPARE */
+async function prepare(scene,item){
+
+try{
+
+status("در حال آماده‌سازی...");
+
+await req("SetSceneItemEnabled",{
+sceneName:scene,
+sceneItemId:item.sceneItemId,
+sceneItemEnabled:true
+});
+
+item.sceneItemEnabled=true;
+selected={scene:scene,id:item.sceneItemId};
+
+render();
+
+status("منبع آماده شد؛ سایر لایه‌های صحنه حفظ شدند.","ok");
+return true;
+
+}catch(e){
+status("خطای آماده‌سازی: "+e.message,"err");
+return false;
+}
+}
+
+/* GO LIVE */
+async function goLive(scene,item){
+
+try{
+
+const prepared=await prepare(scene,item);
+if(!prepared)throw Error("آماده‌سازی منبع ناموفق بود");
+
+const studio=await req("GetStudioModeEnabled");
+
+if(studio.studioModeEnabled){
+
+await req("SetCurrentPreviewScene",{
+sceneName:scene
+});
+
+await req("TriggerStudioModeTransition");
+
+}else{
+
+await req("SetCurrentProgramScene",{
+sceneName:scene
+});
+
+}
+
+await new Promise(r=>setTimeout(r,600));
+
+const p=await req("GetCurrentProgramScene");
+
+if(p.currentProgramSceneName!==scene)
+throw Error("انتقال به Program تأیید نشد");
+
+await updateProgram();
+
+status("انتقال به لایو تأیید شد.","ok");
+
+}catch(e){
+status("خطای انتقال: "+e.message,"err");
+}
+}
+
+/* AUTO LOGIN STATE */
+if(sessionStorage.getItem("controlAuthenticated")==="1"){
+$("loginPage").style.display="none";
+$("controlPage").style.display="block";
+$("obsPassword").value=sessionStorage.getItem("obsPassword")||"";
+connectOBS();
+}
+
+</script>
+<!-- کد Broadcast Control به‌صورت داخلی در همین فایل قرار گرفته است -->
+<script>
+/* Broadcast Control Ultimate - OBS WebSocket v5 extension */
+(()=>{"use strict";
+const $=id=>document.getElementById(id), req=(t,d={})=>window.req(t,d), meterNodes=new Map(), baseVolumes=new Map(), audioNames=[];
+const priority={enabled:false,active:false,busy:false};
+const css=document.createElement("style");css.textContent="#broadcastDock{display:flex;flex-direction:column;gap:9px;min-height:600px}#bcNav{display:flex;gap:6px;flex-wrap:wrap}#bcNav button{background:#263e59}#bcNav button.active{background:#0877bd}.bcPage{display:none;background:#142238;border:1px solid #344c69;border-radius:9px;padding:12px;overflow:auto}.bcPage.active{display:block}.bcGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:9px}.bcCard{background:#1c3049;border:1px solid #405a78;border-radius:9px;padding:11px;margin:7px 0}.bcRow{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}.bcInput{background:#101d30;color:white;border:1px solid #506783;border-radius:7px;padding:9px;font:inherit;width:100%}.bcField{display:flex;flex-direction:column;gap:5px;margin:8px 0}.bcField label,.bcMuted{font-size:12px;color:#aec3d9}.bcRange{width:100%;accent-color:#38a8ef}.bcBtn{padding:8px 10px;background:#285b87}.good{background:#17643e}.bad{background:#8d343b}";
+document.head.append(css);
+function log(t){let e=$("bcLog");if(e){let p=document.createElement("p");p.textContent=new Date().toLocaleTimeString("fa-IR")+" — "+t;e.prepend(p)}}
+function build(){if($("broadcastDock"))return;let d=document.createElement("section");d.id="broadcastDock";d.innerHTML='<nav id="bcNav"><button class="active" data-p="audio">میز صدای Broadcast</button><button data-p="sources">مدیریت منابع</button><button data-p="live">پخش و ضبط</button><button data-p="filters">پردازش صدا</button><button data-p="system">مرکز وضعیت</button></nav><section id="bc-audio" class="bcPage active"><div class="bcRow"><h2>میکسر چندکاناله</h2><button id="bcAudioRefresh" class="bcBtn">تازه‌سازی</button></div><p class="bcMuted">کنترل سطح، قطع و وصل و تراز صدای ورودی‌های OBS.</p><div class="bcCard"><h3>اولویت هوشمند صدای سرپرست</h3><div class="bcGrid"><div class="bcField"><label>میکروفون سرپرست</label><select id="bcPrioritySelect" class="bcInput"></select></div><div class="bcField"><label>تقویت سرپرست (dB)</label><input id="bcSupBoost" class="bcInput" type="number" min="0" max="6" value="3"></div><div class="bcField"><label>کاهش صدای سایر میکروفون‌ها (dB)</label><input id="bcDuckDb" class="bcInput" type="number" min="0" max="24" value="10"></div><div class="bcField"><label>آستانه تشخیص صحبت</label><input id="bcVoiceThreshold" class="bcInput" type="number" min="0.01" max="0.5" step="0.01" value="0.06"></div></div><button id="bcPriorityEnable" class="bcBtn">فعال‌سازی اولویت سرپرست</button><span id="bcPriorityState" class="bcMuted">غیرفعال؛ همه ورودی‌ها با سطح عادی پخش می‌شوند.</span></div><div id="bcMixer" class="bcGrid"></div></section><section id="bc-sources" class="bcPage"><h2>افزودن منبع به صحنه</h2><div class="bcCard bcGrid"><div class="bcField"><label>صحنه</label><select id="bcScene" class="bcInput"></select></div><div class="bcField"><label>نوع منبع</label><select id="bcKind" class="bcInput"><option value="wasapi_input_capture">میکروفون / ورودی صوتی</option><option value="wasapi_output_capture">صدای دسکتاپ</option><option value="ffmpeg_source">فایل صوتی یا ویدئویی</option><option value="image_source">تصویر</option><option value="dshow_input">دوربین / کپچر کارت</option><option value="browser_source">مرورگر</option><option value="color_source">پس‌زمینه رنگی</option><option value="text_gdiplus">متن</option></select></div><div class="bcField"><label>نام منبع</label><input id="bcName" class="bcInput" placeholder="مثلاً میکروفون مداح"></div></div><div class="bcField"><label>تنظیمات اختصاصی منبع (JSON اختیاری)</label><input id="bcSettings" class="bcInput" placeholder="{}"></div><button id="bcCreate" class="bcBtn good">افزودن منبع</button><div id="bcSourceList" class="bcCard"></div><div class="bcCard"><h3>تبدیل و جای‌گذاری منبع</h3><div class="bcField"><label>منبع صحنه</label><select id="bcTransformItem" class="bcInput"></select></div><div class="bcGrid"><div class="bcField"><label>موقعیت افقی X</label><input id="bcPosX" class="bcInput" type="number" step="1"></div><div class="bcField"><label>موقعیت عمودی Y</label><input id="bcPosY" class="bcInput" type="number" step="1"></div><div class="bcField"><label>مقیاس افقی</label><input id="bcScaleX" class="bcInput" type="number" step="0.01"></div><div class="bcField"><label>مقیاس عمودی</label><input id="bcScaleY" class="bcInput" type="number" step="0.01"></div><div class="bcField"><label>چرخش (درجه)</label><input id="bcRotation" class="bcInput" type="number" step="1"></div></div><div class="bcRow"><button id="bcTransformRead" class="bcBtn">خواندن مقادیر OBS</button><button id="bcTransformApply" class="bcBtn good">اعمال تغییرات</button></div><p class="bcMuted">مقادیر فعلی از OBS خوانده می‌شوند و فقط فیلدهای قابل ویرایش ارسال می‌شوند.</p></div><div class="bcCard"><h3>مدیریت صحنه‌ها</h3><div class="bcRow"><input id="bcNewScene" class="bcInput" placeholder="نام صحنه جدید"><button id="bcSceneCreate" class="bcBtn good">ساخت صحنه</button><button id="bcSceneRemove" class="bcBtn bad">حذف صحنه انتخاب‌شده</button></div><p class="bcMuted">حذف صحنه نیازمند تأیید است و منابع صحنه نیز از OBS حذف می‌شوند.</p></div><div class="bcCard"><h3>کنترل پخش رسانه</h3><div class="bcField"><label>منبع رسانه</label><select id="bcMediaSelect" class="bcInput"></select></div><div class="bcRow"><button id="bcMediaPlay" class="bcBtn good">پخش</button><button id="bcMediaPause" class="bcBtn">مکث</button><button id="bcMediaStop" class="bcBtn bad">توقف</button><button id="bcMediaRestart" class="bcBtn">از ابتدا</button><button id="bcMediaNext" class="bcBtn">بعدی</button><button id="bcMediaPrev" class="bcBtn">قبلی</button></div><div id="bcMediaState" class="bcMuted">منبعی انتخاب نشده است.</div></div></section><section id="bc-live" class="bcPage"><h2>پخش و ضبط</h2><div class="bcGrid"><div class="bcCard"><h3>پخش زنده</h3><span id="bcStreamState">—</span><div class="bcRow"><button id="bcStartStream" class="bcBtn good">شروع پخش</button><button id="bcStopStream" class="bcBtn bad">توقف پخش</button></div></div><div class="bcCard"><h3>ضبط</h3><span id="bcRecordState">—</span><div class="bcRow"><button id="bcStartRecord" class="bcBtn good">شروع ضبط</button><button id="bcStopRecord" class="bcBtn bad">توقف ضبط</button></div></div><div class="bcCard"><h3>حالت استودیو</h3><span id="bcStudioState">—</span><button id="bcStudio" class="bcBtn">تغییر حالت استودیو</button></div></div><div class="bcGrid"><div class="bcCard"><h3>گذار تصویر</h3><div class="bcField"><label>نوع Transition</label><select id="bcTransition" class="bcInput"></select></div><div class="bcField"><label>مدت انتقال (میلی‌ثانیه)</label><input id="bcTransitionDuration" class="bcInput" type="number" min="0" max="20000" step="50" value="300"></div><button id="bcTransitionApply" class="bcBtn">اعمال Transition</button></div><div class="bcCard"><h3>Replay Buffer</h3><span id="bcReplayState">در حال بررسی</span><div class="bcRow"><button id="bcReplayStart" class="bcBtn good">شروع</button><button id="bcReplayStop" class="bcBtn bad">توقف</button><button id="bcReplaySave" class="bcBtn">ذخیره کلیپ</button></div></div><div class="bcCard"><h3>دوربین مجازی</h3><span id="bcVirtualState">در حال بررسی</span><div class="bcRow"><button id="bcVirtualStart" class="bcBtn good">شروع</button><button id="bcVirtualStop" class="bcBtn bad">توقف</button></div></div><div class="bcCard"><h3>کنترل پیشرفته ضبط</h3><div class="bcRow"><button id="bcRecordPause" class="bcBtn">مکث ضبط</button><button id="bcRecordResume" class="bcBtn good">ادامه ضبط</button><button id="bcRecordSplit" class="bcBtn">بخش جدید</button></div></div></div><p class="bcMuted">عملیات پخش و ضبط تنها با فرمان مستقیم اپراتور اجرا می‌شود؛ قابلیت‌های پشتیبانی‌نشده در نسخه OBS با پیام خطا مشخص می‌شوند.</p></section><section id="bc-filters" class="bcPage"><h2>پردازش صوت</h2><div class="bcCard"><div class="bcField"><label>کانال صوتی</label><select id="bcFilterInput" class="bcInput"></select></div><div id="bcFilters"></div><div class="bcGrid"><div class="bcField"><label>نوع فیلتر</label><select id="bcFilterKind" class="bcInput"><option value="compressor_filter">Compressor</option><option value="noise_suppress_filter">Noise Suppression</option><option value="noise_gate_filter">Noise Gate</option><option value="limiter_filter">Limiter</option><option value="expander_filter">Expander</option><option value="gain_filter">Gain</option></select></div><div class="bcField"><label>نام فیلتر</label><input id="bcFilterName" class="bcInput"></div></div><button id="bcAddFilter" class="bcBtn good">افزودن فیلتر</button><p class="bcMuted">فیلترها روی منبع انتخاب‌شده در OBS اعمال می‌شوند. پارامترها وابسته به نوع فیلتر و نسخه OBS هستند.</p></div></section><section id="bc-system" class="bcPage"><h2>مرکز وضعیت سامانه</h2><div class="bcGrid"><div class="bcCard">اتصال: <b id="bcConn">—</b></div><div class="bcCard">تعداد صحنه‌ها: <b id="bcScenes">—</b></div><div class="bcCard">ورودی‌های صوتی: <b id="bcAudioCount">—</b></div></div><div class="bcCard"><h3>گزارش عملیات</h3><div id="bcLog" class="bcMuted">آماده</div></div></section>';
+let main=$("controlPage").querySelector("main");main.style.display="grid";main.style.gridTemplateColumns="29% 71%";main.style.gridTemplateRows="minmax(440px,55vh) auto";main.style.height="auto";main.style.overflow="visible";main.append(d);d.style.gridColumn="1 / -1";$("controlPage").style.height="auto";$("controlPage").style.overflow="auto";
+d.querySelectorAll("#bcNav button").forEach(b=>b.onclick=()=>{d.querySelectorAll("#bcNav button").forEach(x=>x.classList.toggle("active",x===b));d.querySelectorAll(".bcPage").forEach(x=>x.classList.toggle("active",x.id==="bc-"+b.dataset.p))});
+$("bcAudioRefresh").onclick=loadAudio;$("bcPriorityEnable").onclick=togglePriority;$("bcPrioritySelect").onchange=async()=>{if(priority.enabled){await applyPriority(false);priority.active=false}};$("bcScene").onchange=loadSources;$("bcMediaSelect").onchange=mediaStatus;$("bcSceneCreate").onclick=createScene;$("bcSceneRemove").onclick=removeScene;$("bcTransformItem").onchange=loadTransform;$("bcTransformRead").onclick=loadTransform;$("bcTransformApply").onclick=applyTransform;$("bcMediaPlay").onclick=()=>mediaAction("OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PLAY");$("bcMediaPause").onclick=()=>mediaAction("OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PAUSE");$("bcMediaStop").onclick=()=>mediaAction("OBS_WEBSOCKET_MEDIA_INPUT_ACTION_STOP");$("bcMediaRestart").onclick=()=>mediaAction("OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART");$("bcMediaNext").onclick=()=>mediaAction("OBS_WEBSOCKET_MEDIA_INPUT_ACTION_NEXT");$("bcMediaPrev").onclick=()=>mediaAction("OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PREVIOUS");$("bcCreate").onclick=createSource;$("bcFilterInput").onchange=loadFilters;$("bcAddFilter").onclick=addFilter;$("bcStartStream").onclick=()=>act("StartStream");$("bcStopStream").onclick=()=>act("StopStream");$("bcStartRecord").onclick=()=>act("StartRecord");$("bcStopRecord").onclick=()=>act("StopRecord");$("bcStudio").onclick=toggleStudio;$("bcTransitionApply").onclick=applyTransition;$("bcReplayStart").onclick=()=>act("StartReplayBuffer");$("bcReplayStop").onclick=()=>act("StopReplayBuffer");$("bcReplaySave").onclick=()=>act("SaveReplayBuffer");$("bcVirtualStart").onclick=()=>act("StartVirtualCam");$("bcVirtualStop").onclick=()=>act("StopVirtualCam");$("bcRecordPause").onclick=()=>act("PauseRecord");$("bcRecordResume").onclick=()=>act("ResumeRecord");$("bcRecordSplit").onclick=()=>act("SplitRecordFile");
+fillScenes();loadTransitions();refresh();
+}
+function fillScenes(){let s=$("bcScene");if(!s)return;s.replaceChildren();(window.scenes||[]).forEach(x=>{let o=document.createElement("option");o.value=x.sceneName;o.textContent=x.sceneName;s.append(o)});$("bcScenes").textContent=(window.scenes||[]).length}
+async function act(t){try{await req(t);log(t+" انجام شد");refresh()}catch(e){alert(e.message);log("خطا: "+e.message)}}
+async function loadAudio(){try{let r=await req("GetInputList"),all=r.inputs||[],a=all.filter(x=>/audio|wasapi|pulse|alsa|coreaudio|ffmpeg|vlc/i.test(x.inputKind||""));audioNames.splice(0,audioNames.length,...a.map(x=>x.inputName));let ps=$("bcPrioritySelect"),old=ps.value;ps.replaceChildren();a.forEach(x=>{let o=document.createElement("option");o.value=x.inputName;o.textContent=x.inputName;ps.append(o)});if(audioNames.includes(old))ps.value=old;let root=$("bcMixer");root.replaceChildren();meterNodes.clear();$("bcAudioCount").textContent=a.length;$("bcFilterInput").replaceChildren();for(let x of a){let op=document.createElement("option");op.value=x.inputName;op.textContent=x.inputName;$("bcFilterInput").append(op);let [v,m]=await Promise.all([req("GetInputVolume",{inputName:x.inputName}),req("GetInputMute",{inputName:x.inputName})]);if(!baseVolumes.has(x.inputName))baseVolumes.set(x.inputName,v.inputVolumeDb??0);let c=document.createElement("div");c.className="bcCard";c.dataset.input=x.inputName;let h=document.createElement("div");h.className="bcRow";let n=document.createElement("b");n.textContent=x.inputName;let mute=document.createElement("button");mute.className="bcBtn "+(m.inputMuted?"bad":"");mute.textContent=m.inputMuted?"فعال‌سازی":"قطع صدا";mute.onclick=async()=>{await req("SetInputMute",{inputName:x.inputName,inputMuted:!m.inputMuted});loadAudio()};h.append(n,mute);let val=document.createElement("div");val.className="bcMuted";val.textContent=(v.inputVolumeDb??0).toFixed(1)+" dB";let meter=document.createElement("div");meter.style.cssText="height:8px;background:#0b1421;border-radius:8px;overflow:hidden;margin:8px 0";let fill=document.createElement("div");fill.style.cssText="height:100%;width:0%;background:#39c47a;transition:width .08s";meter.append(fill);meterNodes.set(x.inputName,fill);let range=document.createElement("input");range.type="range";range.className="bcRange";range.min="-60";range.max="6";range.step=".5";range.value=Math.max(-60,Math.min(6,v.inputVolumeDb??0));range.onchange=async()=>{baseVolumes.set(x.inputName,Number(range.value));await req("SetInputVolume",{inputName:x.inputName,inputVolumeDb:Number(range.value)});val.textContent=Number(range.value).toFixed(1)+" dB";if(priority.active)applyPriority(true)};c.append(h,val,meter,range);root.append(c)}if(!a.length)root.textContent="ورودی صوتی در OBS یافت نشد.";await loadFilters()}catch(e){log("میکسر: "+e.message)}}
+function meterPeak(x){let values=[];const walk=v=>{if(typeof v==="number"){if(v>=0&&Number.isFinite(v))values.push(v)}else if(Array.isArray(v))v.forEach(walk);else if(v&&typeof v==="object"){if(v.inputLevelsMul!==undefined)walk(v.inputLevelsMul);else if(v.inputLevels!==undefined)walk(v.inputLevels);else Object.values(v).forEach(walk)}};walk(x.inputLevels||[]);return values.length?Math.max(...values):0}
+async function applyPriority(active){if(priority.busy)return;const supervisor=$("bcPrioritySelect").value;if(!supervisor)return;priority.busy=true;priority.active=active;try{const boost=Math.max(0,Math.min(6,Number($("bcSupBoost").value)||0)),duck=Math.max(0,Math.min(24,Number($("bcDuckDb").value)||0));for(const name of audioNames){const base=baseVolumes.get(name);if(base===undefined)continue;const target=active?(name===supervisor?Math.min(6,base+boost):Math.max(-100,base-duck)):base;await req("SetInputVolume",{inputName:name,inputVolumeDb:target})}$("bcPriorityState").textContent=active?"سرپرست فعال است؛ سایر صداها کاهش یافته‌اند اما قطع نشده‌اند.":"صدای همه ورودی‌ها به سطح عادی بازگشت.";log(active?"اولویت سرپرست فعال شد":"سطح عادی صدا بازیابی شد")}catch(e){priority.active=false;log("خطای اولویت صدا: "+e.message)}finally{priority.busy=false}}
+async function togglePriority(){if(priority.enabled){priority.enabled=false;await applyPriority(false);$("bcPriorityEnable").textContent="فعال‌سازی اولویت سرپرست";$("bcPriorityState").textContent="غیرفعال"}else{if(!$("bcPrioritySelect").value){alert("ابتدا میکروفون سرپرست را انتخاب کنید.");return}priority.enabled=true;priority.active=false;$("bcPriorityEnable").textContent="غیرفعال‌کردن اولویت سرپرست";$("bcPriorityState").textContent="فعال؛ تشخیص خودکار صحبت سرپرست";log("اولویت خودکار سرپرست فعال شد")}}
+async function loadTransform(){try{let sceneName=$("bcScene").value,sceneItemId=Number($("bcTransformItem").value);if(!sceneName||!Number.isInteger(sceneItemId))throw Error("ابتدا منبع صحنه را انتخاب کنید.");let r=await req("GetSceneItemTransform",{sceneName,sceneItemId}),t=r.sceneItemTransform||{};$("bcPosX").value=t.positionX??0;$("bcPosY").value=t.positionY??0;$("bcScaleX").value=t.scaleX??1;$("bcScaleY").value=t.scaleY??1;$("bcRotation").value=t.rotation??0;window.bcTransformCache=t;log("مقادیر تبدیل از OBS خوانده شد")}catch(e){log("خواندن تبدیل: "+e.message)}}
+async function applyTransform(){try{let sceneName=$("bcScene").value,sceneItemId=Number($("bcTransformItem").value);if(!sceneName||!Number.isInteger(sceneItemId))throw Error("ابتدا منبع صحنه را انتخاب کنید.");let old=window.bcTransformCache||{},t={...old,positionX:Number($("bcPosX").value),positionY:Number($("bcPosY").value),scaleX:Number($("bcScaleX").value),scaleY:Number($("bcScaleY").value),rotation:Number($("bcRotation").value)};if(Object.values(t).some(v=>typeof v==="number"&&!Number.isFinite(v)))throw Error("یکی از مقادیر نامعتبر است.");await req("SetSceneItemTransform",{sceneName,sceneItemId,sceneItemTransform:t});window.bcTransformCache=t;log("تبدیل منبع اعمال شد")}catch(e){alert("اعمال تبدیل: "+e.message)}}
+async function createScene(){try{let sceneName=$("bcNewScene").value.trim();if(!sceneName)throw Error("نام صحنه را وارد کنید.");await req("CreateScene",{sceneName});$("bcNewScene").value="";if(window.refreshOBSScenes)await window.refreshOBSScenes();fillScenes();loadSources();log("صحنه ساخته شد: "+sceneName)}catch(e){alert("ساخت صحنه: "+e.message)}}
+async function removeScene(){let sceneName=$("bcScene").value;if(!sceneName)return;if(!confirm("صحنه «"+sceneName+"» و منابع آن حذف شود؟ این عملیات قابل بازگشت نیست."))return;try{await req("RemoveScene",{sceneName});if(window.refreshOBSScenes)await window.refreshOBSScenes();fillScenes();loadSources();log("صحنه حذف شد: "+sceneName)}catch(e){alert("حذف صحنه: "+e.message)}}
+async function loadMediaInputs(){try{let r=await req("GetInputList"),items=(r.inputs||[]).filter(x=>/ffmpeg_source|vlc_source/i.test(x.inputKind||"")),s=$("bcMediaSelect"),old=s.value;s.replaceChildren();items.forEach(x=>{let o=document.createElement("option");o.value=x.inputName;o.textContent=x.inputName;s.append(o)});if(items.some(x=>x.inputName===old))s.value=old;if(!items.length)$("bcMediaState").textContent="منبع رسانه‌ای (ویدئو/فایل) در OBS پیدا نشد.";else await mediaStatus()}catch(e){log("رسانه: "+e.message)}}
+async function mediaAction(action){try{let inputName=$("bcMediaSelect").value;if(!inputName)throw Error("ابتدا منبع رسانه را انتخاب کنید.");await req("TriggerMediaInputAction",{inputName,mediaAction:action});await mediaStatus();log("فرمان رسانه ارسال شد")}catch(e){alert(e.message)}}
+async function mediaStatus(){try{let inputName=$("bcMediaSelect").value;if(!inputName)return;let r=await req("GetMediaInputStatus",{inputName});let state=r.mediaState||"نامشخص";let elapsed=Number.isFinite(r.mediaCursor)?Math.floor(r.mediaCursor/1000):null;let total=Number.isFinite(r.mediaDuration)?Math.floor(r.mediaDuration/1000):null;$("bcMediaState").textContent=state+(elapsed!==null?" — "+elapsed+"s":"")+(total!==null?" / "+total+"s":"")}catch(e){$("bcMediaState").textContent="وضعیت رسانه: "+e.message}}
+async function loadSources(){try{let scene=$("bcScene").value;if(!scene)return;let r=await req("GetSceneItemList",{sceneName:scene}),root=$("bcSourceList");root.replaceChildren();let h=document.createElement("h3");h.textContent="منابع صحنه "+scene;root.append(h);let tr=$("bcTransformItem");tr.replaceChildren();(r.sceneItems||[]).forEach(i=>{let op=document.createElement("option");op.value=i.sceneItemId;op.textContent=i.sourceName;tr.append(op)});(r.sceneItems||[]).forEach(i=>{let row=document.createElement("div");row.className="bcRow";let t=document.createElement("span");t.textContent=i.sourceName+" — "+(i.sceneItemEnabled?"روشن":"خاموش");let toggle=document.createElement("button");toggle.className="bcBtn";toggle.textContent=i.sceneItemEnabled?"مخفی‌کردن":"نمایش";toggle.onclick=async()=>{await req("SetSceneItemEnabled",{sceneName:scene,sceneItemId:i.sceneItemId,sceneItemEnabled:!i.sceneItemEnabled});loadSources()};let lock=document.createElement("button");lock.className="bcBtn";lock.textContent=i.sceneItemLocked?"بازکردن قفل":"قفل";lock.onclick=async()=>{await req("SetSceneItemLocked",{sceneName:scene,sceneItemId:i.sceneItemId,sceneItemLocked:!i.sceneItemLocked});loadSources()};let remove=document.createElement("button");remove.className="bcBtn bad";remove.textContent="حذف از صحنه";remove.onclick=async()=>{if(!confirm("این منبع فقط از صحنه انتخاب‌شده حذف شود؟"))return;await req("RemoveSceneItem",{sceneName:scene,sceneItemId:i.sceneItemId});loadSources()};row.append(t,toggle,lock,remove);root.append(row)});if((r.sceneItems||[]).length)await loadTransform()}catch(e){log(e.message)}}
+async function createSource(){try{let scene=$("bcScene").value,name=$("bcName").value.trim(),kind=$("bcKind").value,settings=$("bcSettings").value.trim()?JSON.parse($("bcSettings").value):{};if(!scene||!name)throw Error("صحنه و نام منبع لازم است.");await req("CreateInput",{sceneName:scene,inputName:name,inputKind:kind,inputSettings:settings,sceneItemEnabled:true});$("bcName").value="";$("bcSettings").value="";log("منبع افزوده شد: "+name);loadSources();loadAudio()}catch(e){alert("افزودن منبع: "+e.message)}}
+async function loadFilters(){try{let name=$("bcFilterInput").value;if(!name)return;let r=await req("GetSourceFilterList",{sourceName:name}),root=$("bcFilters");root.replaceChildren();(r.filters||[]).forEach(f=>{let row=document.createElement("div");row.className="bcRow";let n=document.createElement("span");n.textContent=f.filterName+" ("+f.filterKind+")";let b=document.createElement("button");b.className="bcBtn";b.textContent=f.filterEnabled?"غیرفعال":"فعال";b.onclick=()=>req("SetSourceFilterEnabled",{sourceName:name,filterName:f.filterName,filterEnabled:!f.filterEnabled}).then(loadFilters);row.append(n,b);root.append(row)})}catch(e){$("bcFilters").textContent=e.message}}
+async function addFilter(){try{let sourceName=$("bcFilterInput").value,filterName=$("bcFilterName").value.trim(),filterKind=$("bcFilterKind").value;if(!sourceName||!filterName)throw Error("کانال و نام فیلتر را مشخص کنید.");await req("CreateSourceFilter",{sourceName,filterName,filterKind,filterSettings:{}});$("bcFilterName").value="";loadFilters();log("فیلتر افزوده شد")}catch(e){alert(e.message)}}
+async function toggleStudio(){try{let r=await req("GetStudioModeEnabled");await req("SetStudioModeEnabled",{studioModeEnabled:!r.studioModeEnabled});refresh()}catch(e){alert(e.message)}}
+async function loadTransitions(){try{let r=await req("GetSceneTransitionList"),s=$("bcTransition");s.replaceChildren();(r.transitions||[]).forEach(t=>{let o=document.createElement("option");o.value=t.transitionName;o.textContent=t.transitionName;s.append(o)});s.value=r.currentSceneTransitionName||s.value;if(r.currentSceneTransitionDuration!==undefined)$("bcTransitionDuration").value=r.currentSceneTransitionDuration}catch(e){$("bcTransition").innerHTML="";log("Transition: "+e.message)}}
+async function applyTransition(){try{let name=$("bcTransition").value,duration=Number($("bcTransitionDuration").value);if(!name)throw Error("نوع Transition انتخاب نشده است.");if(!Number.isFinite(duration)||duration<0||duration>20000)throw Error("مدت انتقال نامعتبر است.");await req("SetCurrentSceneTransition",{transitionName:name});await req("SetCurrentSceneTransitionDuration",{transitionDuration:duration});log("Transition اعمال شد: "+name)}catch(e){alert(e.message)}}
+async function refresh(){try{let [s,r,m]=await Promise.all([req("GetStreamStatus"),req("GetRecordStatus"),req("GetStudioModeEnabled")]);$("bcStreamState").textContent=s.outputActive?"در حال پخش":"متوقف";$("bcRecordState").textContent=r.outputActive?(r.outputPaused?"ضبط متوقف موقت":"در حال ضبط"):"متوقف";$("bcStudioState").textContent=m.studioModeEnabled?"فعال":"غیرفعال";$("bcConn").textContent="متصل";await refreshAdvanced();await loadAudio();await loadSources();await loadMediaInputs()}catch(e){if($("bcConn"))$("bcConn").textContent="قطع / خطا";log(e.message)}}
+async function refreshAdvanced(){for(const [request,id,field] of [["GetReplayBufferStatus","bcReplayState","outputActive"],["GetVirtualCamStatus","bcVirtualState","outputActive"]]){try{let r=await req(request);$(id).textContent=r[field]?"فعال":"غیرفعال"}catch(e){$(id).textContent="در این نسخه در دسترس نیست"}}}
+window.addEventListener("obs-ready",()=>{fillScenes();refresh()});
+window.addEventListener("obs-event",ev=>{const d=ev.detail||{};if(d.eventType!=="InputVolumeMeters")return;let supervisorLevel=0;(d.eventData?.inputs||[]).forEach(x=>{let peak=meterPeak(x);if(x.inputName===$("bcPrioritySelect")?.value)supervisorLevel=peak;const node=meterNodes.get(x.inputName);if(!node)return;let pct=Math.max(0,Math.min(100,peak*100));node.style.width=pct+"%";node.style.background=pct>0.92?"#ef4444":pct>0.75?"#e8b949":"#39c47a"});if(priority.enabled&&!priority.busy){let threshold=Math.max(.01,Math.min(.5,Number($("bcVoiceThreshold").value)||.06));let speaking=supervisorLevel>=threshold;if(speaking!==priority.active)applyPriority(speaking)}});
+const old=window.connectOBS;if(typeof old==="function")window.connectOBS=function(){let x=old.apply(this,arguments);setTimeout(()=>{if(window.ws&&window.ws.readyState===1){build();refresh()}},1800);return x};
+const ob=new MutationObserver(()=>{if($("controlPage")&&$("controlPage").style.display!=="none"&&!$("broadcastDock")){build();if(window.ws&&window.ws.readyState===1)refresh()}});
+ob.observe(document.body,{subtree:true,attributes:true,attributeFilter:["style"]});
+function initializeDock(){const page=$("controlPage");if(!page||page.style.display==="none")return;try{build();if(window.ws&&window.ws.readyState===1)refresh();else if(window.ws)window.ws.addEventListener("open",()=>refresh(),{once:true})}catch(e){console.error("Broadcast Control initialization failed:",e)}}
+initializeDock();
+window.addEventListener("load",initializeDock,{once:true});
+})();
+</script>
+</body>
+</html>
