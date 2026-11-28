@@ -171,6 +171,7 @@ type="password"
 placeholder="رمز ورود اتاق فرمان"
 autocomplete="current-password"
 required>
+<input id="obsPassword" type="password" placeholder="رمز اتصال OBS (WebSocket)" autocomplete="off" required>
 <button type="submit">ورود به اتاق فرمان</button>
 </form>
 
@@ -277,6 +278,7 @@ return;
 }
 
 sessionStorage.setItem("controlAuthenticated","1");
+sessionStorage.setItem("obsPassword",$("obsPassword").value);
 
 $("loginPage").style.display="none";
 $("controlPage").style.display="block";
@@ -286,6 +288,7 @@ connectOBS();
 
 function logout(){
 sessionStorage.removeItem("controlAuthenticated");
+sessionStorage.removeItem("obsPassword");
 if(ws)ws.close();
 clearInterval(programTimer);
 clearInterval(thumbTimer);
@@ -334,6 +337,7 @@ requestData:data
 }));
 });
 }
+window.req=req;
 
 /* CONNECT */
 function connectOBS(){
@@ -341,6 +345,7 @@ function connectOBS(){
 status("در حال اتصال...");
 
 ws=new WebSocket("ws://127.0.0.1:4455");
+window.ws=ws;
 
 ws.onopen=()=>status("اتصال برقرار شد");
 
@@ -360,7 +365,7 @@ if(m.d.authentication){
 const a=m.d.authentication;
 
 authentication=await digest(
-await digest($("loginPassword").value+a.salt)+a.challenge
+await digest($("obsPassword").value+a.salt)+a.challenge
 );
 
 }
@@ -389,6 +394,10 @@ clearInterval(thumbTimer);
 programTimer=setInterval(updateProgram,1200);
 thumbTimer=setInterval(updateThumbs,4000);
 
+}
+
+else if(m.op===5&&m.d){
+window.dispatchEvent(new CustomEvent("obs-event",{detail:m.d}));
 }
 
 else if(m.op===7&&m.d){
@@ -428,6 +437,7 @@ try{
 
 const r=await req("GetSceneList");
 scenes=r.scenes||[];
+window.scenes=scenes;
 
 for(const s of scenes){
 
@@ -706,6 +716,7 @@ status("خطای انتقال: "+e.message,"err");
 if(sessionStorage.getItem("controlAuthenticated")==="1"){
 $("loginPage").style.display="none";
 $("controlPage").style.display="block";
+$("obsPassword").value=sessionStorage.getItem("obsPassword")||"";
 connectOBS();
 }
 
