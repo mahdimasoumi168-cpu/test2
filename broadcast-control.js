@@ -38,4 +38,7 @@ window.addEventListener("obs-event",ev=>{const d=ev.detail||{};if(d.eventType!==
 const old=window.connectOBS;if(typeof old==="function")window.connectOBS=function(){let x=old.apply(this,arguments);setTimeout(()=>{if(window.ws&&window.ws.readyState===1){build();refresh()}},1800);return x};
 const ob=new MutationObserver(()=>{if($("controlPage")&&$("controlPage").style.display!=="none"&&!$("broadcastDock")){build();if(window.ws&&window.ws.readyState===1)refresh()}});
 ob.observe(document.body,{subtree:true,attributes:true,attributeFilter:["style"]});
+function initializeDock(){const page=$("controlPage");if(!page||page.style.display==="none")return;try{build();if(window.ws&&window.ws.readyState===1)refresh();else if(window.ws)window.ws.addEventListener("open",()=>refresh(),{once:true})}catch(e){console.error("Broadcast Control initialization failed:",e)}}
+initializeDock();
+window.addEventListener("load",initializeDock,{once:true});
 })();
