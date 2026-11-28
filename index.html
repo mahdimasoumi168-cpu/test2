@@ -388,6 +388,7 @@ status("خطای ورود OBS","err");
 else if(m.op===2){
 
 await loadScenes();
+window.dispatchEvent(new Event("obs-ready"));
 
 clearInterval(programTimer);
 clearInterval(thumbTimer);
